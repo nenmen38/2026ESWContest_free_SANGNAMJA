@@ -1,17 +1,20 @@
 # safe_smart_window_system
 
-A new Flutter project.
+안전 스마트 창문 시스템 프로젝트
 
-## Getting Started
+## 프로젝트 구조
 
-This project is a starting point for a Flutter application.
+```text
+firmware/   펌웨어 작업 폴더
+software/   Flutter 앱 작업 폴더
+```
 
-A few resources to get you started if this is your first Flutter project:
+## 소프트웨어 실행
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Flutter 앱은 `software/` 폴더에서 실행
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+cd software
+flutter pub get
+flutter run
+```
