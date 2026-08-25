@@ -1,0 +1,29 @@
+{
+  "motorCommands": [
+    {
+      "name": "valid",
+      "accepted": true,
+      "payload": {"schemaVersion": 1, "commandId": "fixture-1", "action": "set_position", "ttlMs": 5000, "position100ths": 2500}
+    },
+    {
+      "name": "missing-command-id",
+      "accepted": false,
+      "payload": {"schemaVersion": 1, "action": "stop", "ttlMs": 5000}
+    },
+    {
+      "name": "wrong-ttl-type",
+      "accepted": false,
+      "payload": {"schemaVersion": 1, "commandId": "fixture-2", "action": "stop", "ttlMs": "5000"}
+    },
+    {
+      "name": "position-out-of-range",
+      "accepted": false,
+      "payload": {"schemaVersion": 1, "commandId": "fixture-3", "action": "set_position", "ttlMs": 5000, "position100ths": 10001}
+    },
+    {
+      "name": "unknown-version",
+      "accepted": false,
+      "payload": {"schemaVersion": 99, "commandId": "fixture-4", "action": "stop", "ttlMs": 5000}
+    }
+  ]
+}

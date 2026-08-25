@@ -1,0 +1,8 @@
+# Name,   Type, SubType, Offset, Size, Flags
+# Standalone BLE provisioning + MQTT5 layout with one factory application.
+nvs,             data, nvs,  0x10000,  0x6000,
+phy_init,        data, phy,  0x18000,  0x1000,
+factory,         app,  factory, 0x20000, 0x3C0000,
+coredump,        data, coredump, 0x3E0000, 0x10000,
+reserved,        0x06,       , 0x3F0000, 0xA000,
+reserved_tail,   0x06,       , 0x3FA000, 0x6000,

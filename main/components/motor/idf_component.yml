@@ -1,0 +1,5 @@
+version: "0.1.0"
+description: "Step and direction motor controller for TB6600 using FastAccelStepper"
+dependencies:
+  idf: ">=6.0"
+  gin66/fastaccelstepper: "^1.2.7"

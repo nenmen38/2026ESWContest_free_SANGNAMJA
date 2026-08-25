@@ -1,0 +1,5 @@
+version: "0.1.0"
+description: "Sensor MQTT protocol adapter"
+dependencies:
+  idf: ">=6.0"
+  espressif/json_generator: "^1.2.0"
