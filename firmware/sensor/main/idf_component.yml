@@ -1,0 +1,2 @@
+dependencies:
+  espressif/bme280: "^0.1.1"

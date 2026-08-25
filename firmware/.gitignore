@@ -1,0 +1,101 @@
+.vscode
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Directory metadata
+.directory
+
+# Temporary files
+*~
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# Log files
+*.log
+*.logs
+
+# Build artifacts and directories
+**/build/
+**/build_*/
+build/
+*.o
+*.a
+*.out
+# Host-side utilities compiled on Windows
+*.exe
+
+# Flutter / Dart generated files
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/.pub-cache/
+**/coverage/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+**/.widget_preview/
+
+# sdk is a reusable Flutter package; applications should keep their lockfiles.
+/sdk/pubspec.lock
+
+# ESP-IDF specific build outputs
+*.bin
+*.elf
+*.map
+# Generated ESP-IDF flashing metadata
+flasher_args.json
+sdkconfig.old
+sdkconfig
+
+# ESP-IDF dependencies
+# For older versions or manual component management
+/components/.idf/
+**/components/.idf/
+# For modern ESP-IDF component manager
+managed_components/
+# If ESP-IDF tools are installed/referenced locally to the project
+.espressif/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+
+# Python environment files
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.egg-info/
+dist/
+provisioning-labels/
+
+# Virtual environment folders
+venv/
+.venv/
+env/
+
+# Language Servers
+.clangd/
+.ccls-cache/
+compile_commands.json
+
+# Windows specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# User-specific configuration files
+*.user
+# General workspace files created by IDEs and tools
+*.workspace
+# Visual Studio user-specific files
+*.suo
+*.sln.docstates

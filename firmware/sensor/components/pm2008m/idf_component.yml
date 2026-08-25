@@ -1,0 +1,5 @@
+version: "0.1.0"
+description: "PM2008M I2C particulate matter sensor driver"
+url: "https://github.com/espressif/esp-idf"
+dependencies:
+  idf: ">=6.0"

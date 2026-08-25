@@ -1,0 +1,139 @@
+menu "Motor node hardware"
+
+config MOTOR_STEP_GPIO
+    int "STEP GPIO"
+    range 0 21
+    default 0
+
+config MOTOR_DIR_GPIO
+    int "DIR GPIO"
+    range 0 21
+    default 1
+
+config MOTOR_FULL_STEPS_PER_REV
+    int "Motor full steps per revolution"
+    range 1 100000
+    default 200
+
+config MOTOR_MICROSTEP
+    int "Driver microstep divisor"
+    range 1 256
+    default 8
+
+config MOTOR_DEFAULT_RPM
+    int "Default motor RPM"
+    range 1 1000
+    default 100
+
+config MOTOR_MAX_RPM
+    int "Maximum motor RPM"
+    range 1 1000
+    default 150
+
+config MOTOR_ACCELERATION
+    int "Acceleration in pulses per second squared"
+    range 1 1000000
+    default 1000
+
+config MOTOR_DIRECTION_INVERTED
+    bool "Invert electrical motor direction"
+    default n
+
+config MOTOR_FULL_TRAVEL_STEPS
+    int "Pulses from fully closed to fully open"
+    range 1 2147483647
+    default 36000
+    help
+        Replace the default with the measured pulse count after installing the
+        actuator. This is not the motor's steps-per-revolution value.
+
+config MOTOR_VENTILATION_POSITION_100THS
+    int "Ventilation position in 0.01 percent units"
+    range 0 10000
+    default 2500
+
+config MOTOR_SAFETY_STALE_MS
+    int "Safety feedback timeout in milliseconds"
+    range 100 10000
+    default 2000
+
+menu "Position and safety feedback"
+
+choice MOTOR_FEEDBACK_MODE
+    prompt "Motor feedback mode"
+    default MOTOR_FEEDBACK_MODE_PULSE_ONLY
+
+config MOTOR_FEEDBACK_MODE_PULSE_ONLY
+    bool "Pulse-only development mode (no limit switches)"
+    help
+        Assume the mechanism is fully closed at boot, set pulse position to
+        zero, and enforce software endpoints. This cannot detect missed steps,
+        manual movement, obstruction, or an incorrect boot position.
+
+config MOTOR_FEEDBACK_MODE_LIMIT_HOME
+    bool "Physical limits, protection loop, and automatic homing"
+    help
+        Use two physical limit switches and a fail-safe protection loop. This
+        is the required mode for product operation.
+
+endchoice
+
+config MOTOR_FEEDBACK_PERIOD_MS
+    int "Position feedback period in milliseconds"
+    range 5 500
+    default 20
+
+if MOTOR_FEEDBACK_MODE_LIMIT_HOME
+
+config MOTOR_OPEN_LIMIT_GPIO
+    int "Fully-open limit GPIO"
+    range 0 21
+    default 4
+
+config MOTOR_CLOSE_LIMIT_GPIO
+    int "Fully-closed limit GPIO"
+    range 0 21
+    default 5
+
+config MOTOR_PROTECTION_GPIO
+    int "Fail-safe protection-loop GPIO"
+    range 0 21
+    default 6
+
+config MOTOR_LIMIT_ACTIVE_LOW
+    bool "Limit switches are active-low"
+    default y
+    help
+        The default wiring is a normally-open switch from the GPIO to GND,
+        using the internal pull-up.
+
+config MOTOR_PROTECTION_ACTIVE_HIGH
+    bool "Protection input is active-high"
+    default y
+    help
+        The safe default is a normally-closed protection loop from GPIO to
+        GND. The internal pull-up makes an open wire read as a fault.
+
+config MOTOR_FEEDBACK_USE_PULLUP
+    bool "Enable internal pull-ups on feedback inputs"
+    default y
+
+config MOTOR_FEEDBACK_DEBOUNCE_MS
+    int "Input debounce time in milliseconds"
+    range 0 1000
+    default 30
+
+config MOTOR_AUTO_HOME
+    bool "Home toward the fully-closed limit after boot"
+    default y
+
+config MOTOR_HOMING_TIMEOUT_MS
+    int "Maximum homing time in milliseconds"
+    range 1000 300000
+    default 30000
+    depends on MOTOR_AUTO_HOME
+
+endif
+
+endmenu
+endmenu
