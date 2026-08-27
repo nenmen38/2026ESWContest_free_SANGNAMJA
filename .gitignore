@@ -49,3 +49,8 @@ app.*.map.json
 
 AGENTS.md
 CLAUDE.md
+
+env/*.json
+!env/example.json
+settings.json
+dev.json

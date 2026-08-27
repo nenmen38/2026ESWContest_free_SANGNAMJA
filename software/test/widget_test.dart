@@ -1,30 +1,18 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:safe_smart_window_system/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('스마트 창문 앱이 한 화면에 핵심 정보를 표시한다', (tester) async {
+    await tester.pumpWidget(const SmartWindowApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('스마트 창문'), findsOneWidget);
+    expect(find.text('창문 개도율'), findsOneWidget);
+    expect(find.text('실내'), findsOneWidget);
+    expect(find.text('실외'), findsOneWidget);
+    expect(find.text('환기'), findsOneWidget);
+    expect(find.text('최근 동작'), findsOneWidget);
+    expect(find.byIcon(Icons.stop_circle_outlined), findsOneWidget);
   });
 }
