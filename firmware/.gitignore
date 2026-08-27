@@ -42,6 +42,7 @@ build/
 
 # sdk is a reusable Flutter package; applications should keep their lockfiles.
 /sdk/pubspec.lock
+/sdk/third_party/**/pubspec.lock
 
 # ESP-IDF specific build outputs
 *.bin
