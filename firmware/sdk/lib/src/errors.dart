@@ -27,28 +27,10 @@ final class AuthenticationException extends EswSdkException {
   const AuthenticationException(super.message, [super.cause]);
 }
 
-/// The requested device is not currently online.
-final class DeviceOfflineException extends EswSdkException {
-  /// Creates an offline-device failure.
-  const DeviceOfflineException(super.message, [super.cause]);
-}
-
 /// Wi-Fi provisioning completed but the device did not become available.
 final class DeviceAvailabilityTimeoutException extends EswSdkException {
   /// Creates an availability timeout failure.
   const DeviceAvailabilityTimeoutException(super.message);
-}
-
-/// A command was rejected by the target device.
-final class CommandRejectedException extends EswSdkException {
-  /// Creates a rejected-command failure.
-  const CommandRejectedException(super.message, [super.cause]);
-}
-
-/// A command did not receive a matching result before its deadline.
-final class CommandTimeoutException extends EswSdkException {
-  /// Creates a command-timeout failure.
-  const CommandTimeoutException(super.message, [super.cause]);
 }
 
 /// Stable reason for a BLE provisioning failure.

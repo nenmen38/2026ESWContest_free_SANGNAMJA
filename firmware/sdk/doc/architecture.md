@@ -17,9 +17,12 @@ state, and sensor telemetry into immutable `EswSdkState` values. A subscriber
 does not need to merge streams or wait for an initial event because `states`
 starts with `currentState`.
 
-The registry retains the latest domain data when a transport disconnects while
-marking every known device offline. Motor commands remain separate from the
-snapshot model so immutable UI state cannot accidentally represent a live
+The registry retains the latest domain data when the same server, port, and
+account reconnect while marking every known device offline. A different
+connection scope clears the registry and pending commands. Generation checks
+inside the MQTT transport prevent callbacks and subscriptions from a superseded
+connection from changing current state. Motor commands remain separate from
+the snapshot model so immutable UI state cannot accidentally represent a live
 transport handle.
 
 ## Setup flow
@@ -31,8 +34,9 @@ the SDK matches the provisioning service kind and suffix to the MQTT device ID
 and waits for fresh domain data.
 
 One SDK instance permits one discovery, Wi-Fi scan, or completion operation at
-a time. A failed setup remains retryable. A successful setup is consumed, and
-all setup sessions become invalid when their SDK is disposed.
+a time. A failed setup remains retryable. A successful setup is consumed and
+releases its BLE candidate and PoP references immediately. All setup sessions
+become invalid when their SDK is disposed.
 
 ## Internal compatibility boundary
 
@@ -48,7 +52,8 @@ v1/devices/{deviceId}/command
 
 Firmware retains presence and motor state. Commands, command events, and sensor
 telemetry are non-retained. The SDK validates schema versions, required fields,
-ranges, command correlation, and identifiers before updating public state.
+ranges, command and target-device correlation, and identifiers before updating
+public state.
 
 ## SDK and application responsibilities
 
@@ -69,3 +74,8 @@ The host application owns:
 The example imports only `package:esw_device_sdk/esw_device_sdk.dart`. Any new
 public API requires Dartdoc, a domain-level unit test, and an example path that
 does not expose wire or BLE implementation types.
+
+The example observes `EswSdkState` directly through a small Riverpod scope.
+Connection persistence belongs to the connection page, and temporary BLE
+candidates, Wi-Fi choices, setup sessions, and progress belong to the
+add-device page rather than a second application-wide state model.

@@ -4,18 +4,26 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:mqtt_client/mqtt_client.dart' hide ConnectionException;
+import 'package:mqtt_client/mqtt_server_client.dart';
 
 import 'control_transport.dart';
 import 'errors.dart';
 import 'models.dart';
-import 'mqtt_client_factory_native.dart' as mqtt_factory;
+
+typedef MqttClientFactory =
+    MqttClient Function(String server, String clientId, int port);
 
 final class MqttControlTransport implements ControlTransport {
+  MqttControlTransport({MqttClientFactory? createClient})
+    : _createClient = createClient ?? _createSecureClient;
+
+  final MqttClientFactory _createClient;
   final _states = StreamController<ControlTransportState>.broadcast();
   final _messages = StreamController<ControlEnvelope>.broadcast();
   MqttClient? _client;
   StreamSubscription<List<MqttReceivedMessage<MqttMessage>>>? _updates;
-  bool _intentionalDisconnect = false;
+  int _generation = 0;
+  bool _disposed = false;
 
   @override
   Stream<ControlTransportState> get states => _states.stream;
@@ -26,36 +34,31 @@ final class MqttControlTransport implements ControlTransport {
   @override
   Future<void> connect(EswConnectionConfig config) async {
     config.validate();
-    await disconnect();
-    _intentionalDisconnect = false;
-    _states.add(ControlTransportState.connecting);
+    final generation = ++_generation;
+    await _disconnectCurrent();
+    if (generation != _generation || _disposed) {
+      throw const ConnectionException('The connection attempt was superseded.');
+    }
+    _emit(generation, ControlTransportState.connecting);
     final clientId =
         'flutter-${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}-'
         '${Random.secure().nextInt(1 << 20).toRadixString(36)}';
-    final client = mqtt_factory.createMqttClient(
-      server: config.server,
-      clientId: clientId,
-      port: config.port,
-    );
+    final client = _createClient(config.server, clientId, config.port);
     client.keepAlivePeriod = 20;
     client.autoReconnect = true;
     client.resubscribeOnAutoReconnect = true;
     client.logging(on: false);
     client.onConnected = () {
-      _states.add(ControlTransportState.connected);
+      _emit(generation, ControlTransportState.connected);
     };
     client.onAutoReconnect = () {
-      _states.add(ControlTransportState.reconnecting);
+      _emit(generation, ControlTransportState.reconnecting);
     };
     client.onAutoReconnected = () {
-      _states.add(ControlTransportState.connected);
+      _emit(generation, ControlTransportState.connected);
     };
     client.onDisconnected = () {
-      _states.add(
-        _intentionalDisconnect
-            ? ControlTransportState.disconnected
-            : ControlTransportState.reconnecting,
-      );
+      _emit(generation, ControlTransportState.reconnecting);
     };
     client.connectionMessage = MqttConnectMessage()
         .withClientIdentifier(clientId)
@@ -66,16 +69,25 @@ final class MqttControlTransport implements ControlTransport {
       await client.connect();
     } catch (error) {
       client.disconnect();
-      _states.add(ControlTransportState.disconnected);
+      if (generation != _generation || _disposed) {
+        throw const ConnectionException(
+          'The connection attempt was superseded.',
+        );
+      }
+      _emit(generation, ControlTransportState.disconnected);
       throw ConnectionException(
         'Could not connect to the control server.',
         error,
       );
     }
+    if (generation != _generation || _disposed || !identical(_client, client)) {
+      client.disconnect();
+      throw const ConnectionException('The connection attempt was superseded.');
+    }
     if (client.connectionStatus?.state != MqttConnectionState.connected) {
       final code = client.connectionStatus?.returnCode;
       client.disconnect();
-      _states.add(ControlTransportState.disconnected);
+      _emit(generation, ControlTransportState.disconnected);
       if (code == MqttConnectReturnCode.badUsernameOrPassword ||
           code == MqttConnectReturnCode.notAuthorized) {
         throw AuthenticationException(
@@ -91,9 +103,11 @@ final class MqttControlTransport implements ControlTransport {
       client.subscribe('v1/devices/+/$suffix', MqttQos.atLeastOnce);
     }
     _updates = client.updates?.listen(
-      _onMessages,
+      (incoming) {
+        if (generation == _generation && !_disposed) _onMessages(incoming);
+      },
       onError: (Object error) {
-        _states.add(ControlTransportState.reconnecting);
+        _emit(generation, ControlTransportState.reconnecting);
       },
     );
   }
@@ -130,18 +144,37 @@ final class MqttControlTransport implements ControlTransport {
 
   @override
   Future<void> disconnect() async {
-    _intentionalDisconnect = true;
+    _generation += 1;
+    await _disconnectCurrent();
+    if (!_disposed && !_states.isClosed) {
+      _states.add(ControlTransportState.disconnected);
+    }
+  }
+
+  Future<void> _disconnectCurrent() async {
     await _updates?.cancel();
     _updates = null;
-    _client?.disconnect();
+    final client = _client;
     _client = null;
-    if (!_states.isClosed) _states.add(ControlTransportState.disconnected);
+    client?.disconnect();
   }
 
   @override
   Future<void> dispose() async {
-    await disconnect();
+    if (_disposed) return;
+    _disposed = true;
+    _generation += 1;
+    await _disconnectCurrent();
     await _states.close();
     await _messages.close();
   }
+
+  void _emit(int generation, ControlTransportState state) {
+    if (generation == _generation && !_disposed && !_states.isClosed) {
+      _states.add(state);
+    }
+  }
 }
+
+MqttClient _createSecureClient(String server, String clientId, int port) =>
+    MqttServerClient.withPort(server, clientId, port)..secure = true;

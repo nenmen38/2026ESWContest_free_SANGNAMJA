@@ -17,12 +17,8 @@ python -m pip install "qrcode[pil]"
 python .\tools\generate_provisioning_qr.py --service-name PROV-MOTOR-A1B2
 ```
 
-The tool prompts for the device PoP without echoing it. Alternatively, derive
-the advertised service name from the Wi-Fi station MAC:
-
-```powershell
-python .\tools\generate_provisioning_qr.py --role motor --mac 01:23:45:67:A1:B2
-```
+The tool prompts for the device PoP without echoing it. Pass the exact BLE
+service name printed by the firmware log or shown by a BLE scan.
 
 Outputs are written under the ignored `provisioning-labels/` directory. Use
 the SVG for printing and do not commit generated labels because the QR embeds

@@ -89,11 +89,22 @@ Connection credentials are never persisted by the SDK. The host application
 must obtain them securely, store them with a platform security facility when
 needed, and provide deletion.
 
+Reconnects to the same server, port, and account retain the latest device
+snapshots and mark them offline until new presence arrives. Connecting to a
+different scope clears the device registry and any pending commands so data
+from one account cannot appear in another.
+
+`EswDeviceSdk` is an `interface class`, so application tests may implement the
+public contract with a fake. Production applications should construct
+`EswDeviceSdk()` and do not need access to transport or BLE dependencies.
+
 ## Control a motor
 
 Motor state is read from `EswSdkState`; `MotorController` contains commands
 only. Commands sent to offline devices return `deviceOffline`, and an operation
-without a correlated firmware result returns `timeout` after five seconds.
+without a correlated firmware result returns `timeout` after five seconds. An
+event completes a command only when both its command ID and target device ID
+match.
 
 ```dart
 final result = await sdk.motor('motor-aabbccddeeff').setPosition(percent: 25);

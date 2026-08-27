@@ -2,13 +2,15 @@ import 'package:esw_device_sdk/esw_device_sdk.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'demo_controller.dart';
+import 'connection.dart';
 import 'provisioning_qr_scanner.dart';
+import 'sdk_scope.dart';
 
 class AddDevicePage extends ConsumerStatefulWidget {
-  const AddDevicePage({required this.profile, super.key});
+  const AddDevicePage({required this.profile, this.scanQr, super.key});
 
   final EswConnectionConfig profile;
+  final Future<ProvisioningQrPayload?> Function(BuildContext context)? scanQr;
 
   @override
   ConsumerState<AddDevicePage> createState() => _AddDevicePageState();
@@ -17,16 +19,18 @@ class AddDevicePage extends ConsumerStatefulWidget {
 class _AddDevicePageState extends ConsumerState<AddDevicePage> {
   final _pop = TextEditingController();
   final _wifiPassword = TextEditingController();
+  List<SetupDevice> _devices = const [];
+  List<SetupWifiNetwork> _networks = const [];
+  SetupDevice? _device;
+  SetupWifiNetwork? _network;
+  DeviceSetup? _setup;
   int _step = 0;
-  bool _showManualSetup = false;
+  bool _busy = false;
+  bool _manual = false;
+  bool _error = false;
+  String _status = 'QR 코드를 스캔하거나 주변 기기를 검색하세요.';
 
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(
-      () => ref.read(demoControllerProvider.notifier).resetProvisioning(),
-    );
-  }
+  EswDeviceSdk get _sdk => ref.read(sdkProvider);
 
   @override
   void dispose() {
@@ -36,558 +40,311 @@ class _AddDevicePageState extends ConsumerState<AddDevicePage> {
   }
 
   Future<void> _scanQr() async {
-    final payload = await Navigator.of(context).push<ProvisioningQrPayload>(
-      MaterialPageRoute(builder: (_) => const ProvisioningQrScannerPage()),
-    );
+    final payload =
+        await (widget.scanQr?.call(context) ??
+            Navigator.of(context).push<ProvisioningQrPayload>(
+              MaterialPageRoute(
+                builder: (_) => const ProvisioningQrScannerPage(),
+              ),
+            ));
     if (!mounted || payload == null) return;
-    _pop.text = payload.pop;
-    final controller = ref.read(demoControllerProvider.notifier);
-    final found = await controller.startQrSetup(payload);
-    if (!mounted || !found) return;
-    setState(() => _step = 1);
+    await _run('QR과 일치하는 기기를 찾는 중입니다...', () async {
+      final setup = await _sdk.startDeviceSetup(payload);
+      final networks = await setup.scanWifi();
+      _setup = setup;
+      _device = setup.device;
+      _devices = [setup.device];
+      _setNetworks(networks);
+      _step = 1;
+    });
   }
 
   Future<void> _scanNearby() async {
-    setState(() => _showManualSetup = true);
-    await ref.read(demoControllerProvider.notifier).scanDevices();
+    _manual = true;
+    await _run('주변 등록 대기 기기를 찾는 중입니다...', () async {
+      _devices = await _sdk.discoverSetupDevices();
+      _device = _devices.firstOrNull;
+      _setup = null;
+      _networks = const [];
+      _network = null;
+      _status = '${_devices.length}개 기기를 찾았습니다.';
+    });
   }
 
-  Future<void> _loadWifi() async {
-    final success = await ref
-        .read(demoControllerProvider.notifier)
-        .scanWifi(_pop.text.trim());
-    if (mounted && success) setState(() => _step = 1);
+  Future<void> _scanWifi() async {
+    final device = _device;
+    if (device == null) return _notice('먼저 기기를 선택하세요.');
+    if (_pop.text.trim().isEmpty) return _notice('기기 인증 코드를 입력하세요.');
+    await _run('기기가 보는 Wi-Fi를 찾는 중입니다...', () async {
+      final setup = _sdk.startManualDeviceSetup(
+        device: device,
+        pop: _pop.text.trim(),
+      );
+      final networks = await setup.scanWifi();
+      _setup = setup;
+      _setNetworks(networks);
+      _step = 1;
+    });
   }
 
-  void _continueToCredentials() {
-    if (ref.read(demoControllerProvider).selectedNetwork == null) {
-      _notice('연결할 Wi-Fi를 선택하세요.');
-      return;
+  Future<void> _complete() async {
+    final setup = _setup;
+    final network = _network;
+    if (setup == null || network == null) return;
+    setState(() {
+      _step = 3;
+      _busy = true;
+      _error = false;
+    });
+    try {
+      final result = await setup.complete(
+        network: network,
+        password: _wifiPassword.text,
+        onProgress: (step) {
+          if (mounted) setState(() => _status = _stepMessage(step));
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _setup = null;
+        _step = 4;
+        _status = '기기 등록 완료 (${result.deviceIp ?? 'IP 확인 안 됨'})';
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _step = 2;
+        _error = true;
+        _status = friendlySdkError(error);
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-    setState(() => _step = 2);
   }
 
-  Future<void> _provision() async {
-    final state = ref.read(demoControllerProvider);
-    final device = state.selectedDevice;
-    final network = state.selectedNetwork;
-    if (device == null || network == null) return;
-    setState(() => _step = 3);
-    final success = await ref
-        .read(demoControllerProvider.notifier)
-        .completeSetup(_wifiPassword.text);
-    if (!mounted) return;
-    setState(() => _step = success ? 4 : 2);
+  Future<void> _run(String status, Future<void> Function() operation) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = false;
+      _status = status;
+    });
+    try {
+      await operation();
+    } on Object catch (error) {
+      _error = true;
+      _status = friendlySdkError(error);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _setNetworks(List<SetupWifiNetwork> networks) {
+    _networks = networks;
+    _network = networks.firstOrNull;
+    _status = '${networks.length}개 Wi-Fi 네트워크를 찾았습니다.';
   }
 
   void _notice(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(demoControllerProvider);
-    final completed = _step == 4;
-    return PopScope(
-      canPop: !state.busy,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(completed ? '기기 추가 완료' : '기기 추가'),
-          leading: IconButton(
-            onPressed: state.busy ? null : () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.close),
-            tooltip: '닫기',
-          ),
-        ),
-        body: SafeArea(
-          child: Column(
-            children: [
-              if (!completed) _StepHeader(currentStep: _step.clamp(0, 3)),
-              Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
-                  child: _content(state),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _content(DemoState state) => switch (_step) {
-    0 => _deviceStep(state),
-    1 => _wifiStep(state),
-    2 => _credentialStep(state),
-    3 => _progressStep(state),
-    _ => _completeStep(state),
-  };
-
-  Widget _deviceStep(DemoState state) => _StepBody(
-    key: const ValueKey('device'),
-    title: '추가할 기기를 준비하세요',
-    description: '기기의 전원을 켜고 상태 표시등이 등록 대기 상태인지 확인하세요.',
-    children: [
-      const _DeviceIllustration(),
-      const _Requirement(
-        icon: Icons.power_settings_new,
-        text: '기기의 전원이 켜져 있어요',
-      ),
-      const _Requirement(icon: Icons.bluetooth, text: '휴대폰의 Bluetooth가 켜져 있어요'),
-      const _Requirement(
-        icon: Icons.near_me_outlined,
-        text: '기기와 휴대폰이 가까이 있어요',
-      ),
-      const SizedBox(height: 12),
-      FilledButton.icon(
-        onPressed: state.busy ? null : _scanQr,
-        icon: const Icon(Icons.qr_code_scanner),
-        label: const Text('QR 코드로 기기 찾기'),
-      ),
-      OutlinedButton(
-        onPressed: state.busy ? null : _scanNearby,
-        child: const Text('QR 코드 없이 찾기'),
-      ),
-      if (_showManualSetup) ...[
-        const SizedBox(height: 12),
-        _StatusBanner(state: state),
-        ...state.nearby.map(
-          (device) => _SelectionTile(
-            selected: state.selectedDevice?.id == device.id,
-            icon: device.name.startsWith('PROV-MOTOR-')
-                ? Icons.blinds
-                : Icons.air,
-            title: _friendlyDeviceName(device.name),
-            subtitle: '${device.name} · 신호 ${device.rssi} dBm',
-            onTap: state.busy
-                ? null
-                : () => ref
-                      .read(demoControllerProvider.notifier)
-                      .selectDevice(device),
-          ),
-        ),
-        TextField(
-          controller: _pop,
-          enabled: !state.busy,
-          obscureText: true,
-          decoration: const InputDecoration(
-            labelText: '기기 인증 코드 (PoP)',
-            hintText: '제품 라벨의 인증 코드',
-            prefixIcon: Icon(Icons.key_outlined),
-            border: OutlineInputBorder(),
-          ),
-        ),
-        FilledButton(
-          onPressed: state.busy || state.selectedDevice == null
-              ? null
-              : _loadWifi,
-          child: const Text('다음'),
-        ),
-      ],
-    ],
-  );
-
-  Widget _wifiStep(DemoState state) => _StepBody(
-    key: const ValueKey('wifi'),
-    title: 'Wi-Fi를 선택하세요',
-    description: '기기가 사용할 Wi-Fi에 연결합니다. 기기에서 감지한 네트워크만 표시됩니다.',
-    onBack: state.busy ? null : () => setState(() => _step = 0),
-    children: [
-      _StatusBanner(state: state),
-      if (state.networks.isEmpty)
-        OutlinedButton.icon(
-          onPressed: state.busy ? null : _loadWifi,
-          icon: const Icon(Icons.refresh),
-          label: const Text('Wi-Fi 다시 검색'),
-        )
-      else
-        ...state.networks.map(
-          (network) => _SelectionTile(
-            selected: state.selectedNetwork == network,
-            icon: _wifiIcon(network.rssi),
-            title: network.ssid.isEmpty ? '숨겨진 네트워크' : network.ssid,
-            subtitle: '${network.rssi} dBm',
-            onTap: state.busy
-                ? null
-                : () => ref
-                      .read(demoControllerProvider.notifier)
-                      .selectNetwork(network),
-          ),
-        ),
-      const SizedBox(height: 8),
-      TextField(
-        controller: _wifiPassword,
-        enabled: !state.busy,
-        obscureText: true,
-        textInputAction: TextInputAction.done,
-        decoration: const InputDecoration(
-          labelText: 'Wi-Fi 비밀번호',
-          prefixIcon: Icon(Icons.lock_outline),
-          border: OutlineInputBorder(),
-        ),
-      ),
-      FilledButton(
-        onPressed: state.busy ? null : _continueToCredentials,
-        child: const Text('다음'),
-      ),
-    ],
-  );
-
-  Widget _credentialStep(DemoState state) => _StepBody(
-    key: const ValueKey('credentials'),
-    title: '추가할 정보를 확인하세요',
-    description: '선택한 Wi-Fi와 연결할 서비스를 확인하세요.',
-    onBack: state.busy ? null : () => setState(() => _step = 1),
-    children: [
-      _SummaryRow(
-        icon: Icons.router_outlined,
-        label: 'Wi-Fi',
-        value: state.selectedNetwork?.ssid ?? '선택 안 됨',
-      ),
-      _SummaryRow(
-        icon: Icons.cloud_outlined,
-        label: '서비스',
-        value: '${widget.profile.server}:${widget.profile.port}',
-      ),
-      _StatusBanner(state: state),
-      FilledButton.icon(
-        onPressed: state.busy ? null : _provision,
-        icon: const Icon(Icons.add_circle_outline),
-        label: const Text('기기 추가'),
-      ),
-    ],
-  );
-
-  Widget _progressStep(DemoState state) => _StepBody(
-    key: const ValueKey('progress'),
-    title: '기기를 연결하고 있어요',
-    description: '앱을 닫거나 기기의 전원을 끄지 마세요.',
-    children: [
-      const SizedBox(height: 48),
-      const Center(child: CircularProgressIndicator()),
-      const SizedBox(height: 32),
-      _StatusBanner(state: state),
-      const _ProgressItem(text: 'Wi-Fi 정보 전달', done: true),
-      const _ProgressItem(text: 'Wi-Fi 연결', done: true),
-      const _ProgressItem(text: '기기 온라인 상태 확인', done: false),
-    ],
-  );
-
-  Widget _completeStep(DemoState state) => _StepBody(
-    key: const ValueKey('complete'),
-    title: '기기가 추가되었습니다',
-    description: '이제 홈에서 기기 상태를 확인하고 제어할 수 있습니다.',
-    children: [
-      const SizedBox(height: 28),
-      Center(
-        child: Container(
-          width: 112,
-          height: 112,
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primaryContainer,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            Icons.check_rounded,
-            size: 64,
-            color: Theme.of(context).colorScheme.onPrimaryContainer,
-          ),
-        ),
-      ),
-      const SizedBox(height: 20),
-      _StatusBanner(state: state),
-      FilledButton(
-        onPressed: () => Navigator.of(context).pop(true),
-        child: const Text('홈으로 이동'),
-      ),
-    ],
-  );
-
-  static String _friendlyDeviceName(String name) =>
-      name.startsWith('PROV-MOTOR-')
-      ? '스마트 환기창'
-      : name.startsWith('PROV-SENSOR-')
-      ? '공기질 센서'
-      : '새 기기';
-
-  static IconData _wifiIcon(int rssi) => rssi >= -55
-      ? Icons.signal_wifi_4_bar
-      : rssi >= -70
-      ? Icons.network_wifi_3_bar
-      : Icons.network_wifi_1_bar;
-}
-
-class _StepHeader extends StatelessWidget {
-  const _StepHeader({required this.currentStep});
-  final int currentStep;
-
-  @override
-  Widget build(BuildContext context) {
-    const labels = ['기기', 'Wi-Fi', '확인', '연결'];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-      child: Row(
-        children: [
-          for (var index = 0; index < labels.length; index++) ...[
-            if (index > 0)
-              Expanded(
-                child: Divider(
-                  color: index <= currentStep
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.outlineVariant,
-                  thickness: 2,
-                ),
-              ),
-            Column(
-              children: [
-                CircleAvatar(
-                  radius: 14,
-                  backgroundColor: index <= currentStep
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: index < currentStep
-                      ? Icon(
-                          Icons.check,
-                          size: 16,
-                          color: Theme.of(context).colorScheme.onPrimary,
-                        )
-                      : Text(
-                          '${index + 1}',
-                          style: TextStyle(
-                            color: index == currentStep
-                                ? Theme.of(context).colorScheme.onPrimary
-                                : Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
-                            fontSize: 12,
-                          ),
-                        ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  labels[index],
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _StepBody extends StatelessWidget {
-  const _StepBody({
-    required this.title,
-    required this.description,
-    required this.children,
-    this.onBack,
-    super.key,
-  });
-
-  final String title;
-  final String description;
-  final List<Widget> children;
-  final VoidCallback? onBack;
-
-  @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-    children: [
-      if (onBack != null)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: onBack,
-            icon: const Icon(Icons.arrow_back, size: 18),
-            label: const Text('이전'),
-          ),
-        ),
-      Text(title, style: Theme.of(context).textTheme.headlineSmall),
-      const SizedBox(height: 8),
-      Text(
-        description,
-        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      ),
-      const SizedBox(height: 24),
-      ...children.map(
-        (child) =>
-            Padding(padding: const EdgeInsets.only(bottom: 12), child: child),
-      ),
-    ],
-  );
-}
-
-class _DeviceIllustration extends StatelessWidget {
-  const _DeviceIllustration();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    height: 148,
-    decoration: BoxDecoration(
-      gradient: LinearGradient(
-        colors: [
-          Theme.of(context).colorScheme.primaryContainer,
-          Theme.of(context).colorScheme.secondaryContainer,
-        ],
-      ),
-      borderRadius: BorderRadius.circular(24),
-    ),
-    child: const Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.phone_android, size: 62),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 22),
-          child: Icon(Icons.bluetooth_connected, size: 34),
-        ),
-        Icon(Icons.sensors, size: 62),
-      ],
-    ),
-  );
-}
-
-class _Requirement extends StatelessWidget {
-  const _Requirement({required this.icon, required this.text});
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
-      const SizedBox(width: 12),
-      Expanded(child: Text(text)),
-    ],
-  );
-}
-
-class _SelectionTile extends StatelessWidget {
-  const _SelectionTile({
-    required this.selected,
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final bool selected;
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: selected
-        ? Theme.of(context).colorScheme.primaryContainer
-        : Theme.of(context).colorScheme.surfaceContainerLow,
-    borderRadius: BorderRadius.circular(16),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_busy,
+    child: Scaffold(
+      appBar: AppBar(title: Text(_step == 4 ? '기기 추가 완료' : '기기 추가')),
+      body: SafeArea(
+        child: Column(
           children: [
-            CircleAvatar(child: Icon(icon)),
-            const SizedBox(width: 14),
+            if (_step < 4) LinearProgressIndicator(value: (_step + 1) / 4),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: ListView(
+                padding: const EdgeInsets.all(20),
                 children: [
-                  Text(title, style: Theme.of(context).textTheme.titleMedium),
-                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                  _stepTitle(),
+                  const SizedBox(height: 16),
+                  if (_step != 4) _statusTile(),
+                  ...switch (_step) {
+                    0 => _deviceStep(),
+                    1 => _wifiStep(),
+                    2 => _confirmStep(),
+                    3 => _progressStep(),
+                    _ => _completeStep(),
+                  },
                 ],
               ),
             ),
-            Icon(selected ? Icons.check_circle : Icons.circle_outlined),
           ],
         ),
       ),
     ),
   );
-}
 
-class _StatusBanner extends StatelessWidget {
-  const _StatusBanner({required this.state});
-  final DemoState state;
+  Widget _stepTitle() => Text(switch (_step) {
+    0 => '추가할 기기를 선택하세요',
+    1 => 'Wi-Fi를 선택하세요',
+    2 => '추가할 정보를 확인하세요',
+    3 => '기기를 연결하고 있어요',
+    _ => '기기가 추가되었습니다',
+  }, style: Theme.of(context).textTheme.headlineSmall);
 
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (state.messageKind) {
-      DemoMessageKind.info => Theme.of(context).colorScheme.secondaryContainer,
-      DemoMessageKind.success => Colors.green.shade100,
-      DemoMessageKind.error => Theme.of(context).colorScheme.errorContainer,
-    };
-    final icon = switch (state.messageKind) {
-      DemoMessageKind.info => Icons.info_outline,
-      DemoMessageKind.success => Icons.check_circle_outline,
-      DemoMessageKind.error => Icons.error_outline,
-    };
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          if (state.busy)
-            const SizedBox.square(
-              dimension: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          else
-            Icon(icon, size: 20),
-          const SizedBox(width: 10),
-          Expanded(child: Text(state.status)),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Icon(icon, color: Theme.of(context).colorScheme.primary),
-      const SizedBox(width: 12),
-      Text(label),
-      const Spacer(),
-      Flexible(child: Text(value, textAlign: TextAlign.end)),
-    ],
-  );
-}
-
-class _ProgressItem extends StatelessWidget {
-  const _ProgressItem({required this.text, required this.done});
-  final String text;
-  final bool done;
-
-  @override
-  Widget build(BuildContext context) => ListTile(
-    contentPadding: EdgeInsets.zero,
-    leading: Icon(
-      done ? Icons.check_circle : Icons.more_horiz,
-      color: done ? Colors.green : Theme.of(context).colorScheme.primary,
+  Widget _statusTile() => Card(
+    color: _error ? Theme.of(context).colorScheme.errorContainer : null,
+    child: ListTile(
+      leading: _busy
+          ? const CircularProgressIndicator()
+          : Icon(_error ? Icons.error_outline : Icons.info_outline),
+      title: Text(_status),
     ),
-    title: Text(text),
   );
+
+  List<Widget> _deviceStep() => [
+    FilledButton.icon(
+      onPressed: _busy ? null : _scanQr,
+      icon: const Icon(Icons.qr_code_scanner),
+      label: const Text('QR 코드로 기기 찾기'),
+    ),
+    OutlinedButton(
+      onPressed: _busy ? null : _scanNearby,
+      child: const Text('QR 코드 없이 찾기'),
+    ),
+    if (_manual) ...[
+      RadioGroup<SetupDevice>(
+        groupValue: _device,
+        onChanged: _busy
+            ? (_) {}
+            : (value) => setState(() {
+                _device = value;
+                _setup = null;
+              }),
+        child: Column(
+          children: _devices
+              .map(
+                (device) => RadioListTile<SetupDevice>(
+                  value: device,
+                  title: Text(device.name),
+                  subtitle: Text('${device.rssi} dBm'),
+                  enabled: !_busy,
+                ),
+              )
+              .toList(),
+        ),
+      ),
+      TextField(
+        controller: _pop,
+        enabled: !_busy,
+        obscureText: true,
+        decoration: const InputDecoration(labelText: '기기 인증 코드 (PoP)'),
+      ),
+      FilledButton(
+        onPressed: _busy || _device == null ? null : _scanWifi,
+        child: const Text('기기의 Wi-Fi 검색'),
+      ),
+    ],
+  ];
+
+  List<Widget> _wifiStep() => [
+    RadioGroup<SetupWifiNetwork>(
+      groupValue: _network,
+      onChanged: _busy ? (_) {} : (value) => setState(() => _network = value),
+      child: Column(
+        children: _networks
+            .map(
+              (network) => RadioListTile<SetupWifiNetwork>(
+                value: network,
+                title: Text(network.ssid.isEmpty ? '숨겨진 네트워크' : network.ssid),
+                subtitle: Text('${network.rssi} dBm'),
+                enabled: !_busy,
+              ),
+            )
+            .toList(),
+      ),
+    ),
+    TextField(
+      controller: _wifiPassword,
+      enabled: !_busy,
+      obscureText: true,
+      decoration: const InputDecoration(labelText: 'Wi-Fi 비밀번호'),
+    ),
+    Row(
+      children: [
+        TextButton(
+          onPressed: _busy ? null : () => setState(() => _step = 0),
+          child: const Text('이전'),
+        ),
+        const Spacer(),
+        Expanded(
+          child: FilledButton(
+            onPressed: _busy || _network == null
+                ? null
+                : () => setState(() => _step = 2),
+            child: const Text('다음'),
+          ),
+        ),
+      ],
+    ),
+  ];
+
+  List<Widget> _confirmStep() => [
+    ListTile(
+      title: const Text('기기'),
+      subtitle: Text(_device?.name ?? '선택 안 됨'),
+    ),
+    ListTile(
+      title: const Text('Wi-Fi'),
+      subtitle: Text(_network?.ssid ?? '선택 안 됨'),
+    ),
+    ListTile(
+      title: const Text('서비스'),
+      subtitle: Text('${widget.profile.server}:${widget.profile.port}'),
+    ),
+    Row(
+      children: [
+        TextButton(
+          onPressed: () => setState(() => _step = 1),
+          child: const Text('이전'),
+        ),
+        const Spacer(),
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: _complete,
+            icon: const Icon(Icons.add_circle_outline),
+            label: const Text('기기 추가'),
+          ),
+        ),
+      ],
+    ),
+  ];
+
+  List<Widget> _progressStep() => const [
+    SizedBox(height: 48),
+    Center(child: CircularProgressIndicator()),
+    SizedBox(height: 24),
+    Text('앱을 닫거나 기기의 전원을 끄지 마세요.', textAlign: TextAlign.center),
+  ];
+
+  List<Widget> _completeStep() => [
+    const SizedBox(height: 32),
+    const Icon(Icons.check_circle, size: 88),
+    const SizedBox(height: 16),
+    Text(_status, textAlign: TextAlign.center),
+    const SizedBox(height: 24),
+    FilledButton(
+      onPressed: () => Navigator.of(context).pop(),
+      child: const Text('홈으로 이동'),
+    ),
+  ];
+
+  static String _stepMessage(DeviceSetupStep step) => switch (step) {
+    DeviceSetupStep.connecting => '기기에 연결하는 중입니다...',
+    DeviceSetupStep.checkingProtocol => '기기 호환성을 확인하는 중입니다...',
+    DeviceSetupStep.securing => '보안 연결을 설정하는 중입니다...',
+    DeviceSetupStep.applyingWifi => 'Wi-Fi 정보를 전달하는 중입니다...',
+    DeviceSetupStep.waitingForWifi => '기기의 Wi-Fi 연결을 기다리는 중입니다...',
+    DeviceSetupStep.waitingForDevice => '기기의 첫 상태를 기다리는 중입니다...',
+    DeviceSetupStep.completed => '기기 상태를 확인했습니다.',
+  };
 }

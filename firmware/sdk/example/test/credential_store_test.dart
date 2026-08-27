@@ -1,4 +1,4 @@
-import 'package:esw_device_sdk_example/demo_controller.dart';
+import 'package:esw_device_sdk_example/connection.dart';
 import 'package:esw_device_sdk/esw_device_sdk.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
