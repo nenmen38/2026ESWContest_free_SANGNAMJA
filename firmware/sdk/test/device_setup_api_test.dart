@@ -2,18 +2,18 @@
 
 import 'dart:async';
 
-import 'package:esp_provisioning_ble/esp_provisioning_ble.dart' show WifiAP;
 import 'package:esw_device_sdk/esw_device_sdk.dart';
 import 'package:esw_device_sdk/src/control_transport.dart';
 import 'package:esw_device_sdk/src/provisioning.dart';
+import 'package:esw_device_sdk/src/sdk.dart' show SdkTestHarness;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('QR setup selects exact device and wraps Wi-Fi models', () async {
     final backend = _FakeProvisioningBackend();
-    final sdk = EswDeviceSdk.withDependenciesForTesting(
-      _FakeControlTransport(),
-      backend,
+    final sdk = SdkTestHarness.create(
+      transport: _FakeControlTransport(),
+      provisioning: backend,
     );
     addTearDown(sdk.dispose);
 
@@ -28,7 +28,10 @@ void main() {
   test('setup requires fresh matching domain data after Wi-Fi', () async {
     final transport = _FakeControlTransport();
     final backend = _FakeProvisioningBackend();
-    final sdk = EswDeviceSdk.withDependenciesForTesting(transport, backend);
+    final sdk = SdkTestHarness.create(
+      transport: transport,
+      provisioning: backend,
+    );
     addTearDown(sdk.dispose);
     await sdk.connect(_config);
     final setup = await sdk.startDeviceSetup(_qr);
@@ -60,9 +63,9 @@ void main() {
 
   test('presence without domain data times out', () async {
     final transport = _FakeControlTransport();
-    final sdk = EswDeviceSdk.withDependenciesForTesting(
-      transport,
-      _FakeProvisioningBackend(),
+    final sdk = SdkTestHarness.create(
+      transport: transport,
+      provisioning: _FakeProvisioningBackend(),
     );
     addTearDown(sdk.dispose);
     await sdk.connect(_config);
@@ -87,9 +90,9 @@ void main() {
 
   test('completed setup cannot be reused', () async {
     final transport = _FakeControlTransport();
-    final sdk = EswDeviceSdk.withDependenciesForTesting(
-      transport,
-      _FakeProvisioningBackend(),
+    final sdk = SdkTestHarness.create(
+      transport: transport,
+      provisioning: _FakeProvisioningBackend(),
     );
     addTearDown(sdk.dispose);
     await sdk.connect(_config);
@@ -97,6 +100,10 @@ void main() {
     final network = (await setup.scanWifi()).single;
     final request = setup.complete(network: network, password: 'password');
     await Future<void>.delayed(Duration.zero);
+    transport.receive(
+      'v1/devices/motor-aabb12ef/presence',
+      '{"status":"online"}',
+    );
     transport.receive('v1/devices/motor-aabb12ef/state', _motorState);
     await request;
 
@@ -104,11 +111,11 @@ void main() {
   });
 
   test('SDK rejects concurrent setup operations', () async {
-    final pendingScan = Completer<List<ProvisioningDevice>>();
+    final pendingScan = Completer<List<SetupDevice>>();
     final backend = _FakeProvisioningBackend(scanResult: pendingScan.future);
-    final sdk = EswDeviceSdk.withDependenciesForTesting(
-      _FakeControlTransport(),
-      backend,
+    final sdk = SdkTestHarness.create(
+      transport: _FakeControlTransport(),
+      provisioning: backend,
     );
     addTearDown(sdk.dispose);
 
@@ -140,34 +147,46 @@ const _motorState = '''
 final class _FakeProvisioningBackend implements ProvisioningBackend {
   _FakeProvisioningBackend({this.scanResult});
 
-  final Future<List<ProvisioningDevice>>? scanResult;
+  final Future<List<SetupDevice>>? scanResult;
   final devices = const [
-    ProvisioningDevice(id: 'ble-motor', name: 'PROV-MOTOR-12EF', rssi: -35),
-    ProvisioningDevice(id: 'ble-sensor', name: 'PROV-SENSOR-C4A0', rssi: -45),
+    SetupDevice(id: 'ble-motor', name: 'PROV-MOTOR-12EF', rssi: -35),
+    SetupDevice(id: 'ble-sensor', name: 'PROV-SENSOR-C4A0', rssi: -45),
   ];
 
   @override
-  Future<List<ProvisioningDevice>> scan({
+  Future<List<SetupDevice>> scan({
     Duration timeout = const Duration(seconds: 8),
   }) => scanResult ?? Future.value(devices);
 
   @override
-  Future<List<WifiAP>> scanWifi({
-    required ProvisioningDevice device,
+  Future<List<SetupWifiNetwork>> scanWifi({
+    required SetupDevice device,
     required String pop,
   }) async => const [
-    WifiAP(ssid: 'contest-wifi', rssi: -42, bssid: 'aa:bb:cc:dd:ee:ff'),
+    SetupWifiNetwork(
+      ssid: 'contest-wifi',
+      rssi: -42,
+      bssid: 'aa:bb:cc:dd:ee:ff',
+      isPrivate: true,
+    ),
   ];
 
   @override
-  Future<ProvisioningResult> provision(
-    ProvisioningRequest request, {
-    void Function(ProvisioningStep step)? onProgress,
+  Future<String?> provision({
+    required SetupDevice device,
+    required String pop,
+    required SetupWifiNetwork network,
+    required String password,
+    void Function(DeviceSetupStep step)? onProgress,
   }) async {
-    for (final step in ProvisioningStep.values) {
+    for (final step in DeviceSetupStep.values.where(
+      (step) =>
+          step != DeviceSetupStep.waitingForDevice &&
+          step != DeviceSetupStep.completed,
+    )) {
       onProgress?.call(step);
     }
-    return const ProvisioningResult(deviceIp: '192.0.2.10');
+    return '192.0.2.10';
   }
 
   @override

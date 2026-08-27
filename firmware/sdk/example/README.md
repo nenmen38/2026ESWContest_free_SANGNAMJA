@@ -13,9 +13,10 @@ wire protocol, BLE matching, and readiness logic remain inside the SDK.
 3. Prepare printed provisioning QR labels or the PoP for manual fallback.
 4. Do not place account secrets in source or committed `--dart-define` values.
 
-The example persists `EswConnectionConfig` with platform secure storage and
-deletes only its own four keys. Device MQTT credentials are factory-injected
-and never pass through the app.
+The example persists one JSON connection record containing
+`EswConnectionConfig` fields with platform secure storage and deletes only that
+record. Device MQTT credentials are factory-injected and never pass through the
+app.
 
 ## Run
 

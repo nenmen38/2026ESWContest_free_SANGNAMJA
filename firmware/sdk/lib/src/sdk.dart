@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
-
 import 'control_transport.dart';
 import 'device_setup.dart';
 import 'errors.dart';
@@ -11,6 +9,9 @@ import 'mqtt_control_transport.dart';
 import 'protocol.dart';
 import 'provisioning.dart';
 import 'provisioning_qr.dart';
+
+part 'sdk_motor_impl.dart';
+part 'sdk_setup_impl.dart';
 
 const _offlineResult = CommandResult(
   status: CommandStatus.deviceOffline,
@@ -51,28 +52,13 @@ abstract interface class MotorController {
 /// Create one instance for the application lifetime. Connection credentials
 /// are supplied at runtime and are never persisted by the SDK. Call [dispose]
 /// when the owning application scope ends.
-final class EswDeviceSdk {
+interface class EswDeviceSdk {
   /// Creates an SDK backed by the production secure control and BLE adapters.
   factory EswDeviceSdk() => EswDeviceSdk._(
     MqttControlTransport(),
     EswProvisioner(),
     const Duration(seconds: 5),
   );
-
-  /// Creates an SDK around a deterministic control transport for tests.
-  @visibleForTesting
-  EswDeviceSdk.withTransportForTesting(
-    ControlTransport transport, {
-    Duration commandTimeout = const Duration(seconds: 5),
-  }) : this._(transport, EswProvisioner(), commandTimeout);
-
-  /// Creates an SDK with deterministic control and provisioning dependencies.
-  @visibleForTesting
-  EswDeviceSdk.withDependenciesForTesting(
-    ControlTransport transport,
-    ProvisioningBackend provisioning, {
-    Duration commandTimeout = const Duration(seconds: 5),
-  }) : this._(transport, provisioning, commandTimeout);
 
   EswDeviceSdk._(this._transport, this._provisioning, this._commandTimeout) {
     _transportStateSubscription = _transport.states.listen(_onTransportState);
@@ -92,6 +78,7 @@ final class EswDeviceSdk {
   late final StreamSubscription<ControlEnvelope> _messageSubscription;
   EswSdkState _currentState = EswSdkState.initial;
   int _domainSequence = 0;
+  ({String server, int port, String account})? _connectionScope;
   bool _setupBusy = false;
   bool _disposed = false;
 
@@ -115,6 +102,19 @@ final class EswDeviceSdk {
   /// Connects to the secure control service and begins automatic discovery.
   Future<void> connect(EswConnectionConfig config) {
     _checkNotDisposed();
+    config.validate();
+    final nextScope = (
+      server: config.server.trim(),
+      port: config.port,
+      account: config.account,
+    );
+    if (_connectionScope case final current? when current != nextScope) {
+      _records.clear();
+      _domainSequence = 0;
+      _completePending(_offlineResult);
+      _emitState();
+    }
+    _connectionScope = nextScope;
     return _transport.connect(config);
   }
 
@@ -141,7 +141,7 @@ final class EswDeviceSdk {
     Duration timeout = const Duration(seconds: 8),
   }) => _runSetupOperation(() async {
     final devices = await _provisioning.scan(timeout: timeout);
-    return List.unmodifiable(devices.map(_toSetupDevice));
+    return List.unmodifiable(devices);
   });
 
   /// Finds the BLE device named by [qr] and creates a guided setup session.
@@ -185,6 +185,7 @@ final class EswDeviceSdk {
       ControlTransportState.reconnecting => EswConnectionState.reconnecting,
     };
     if (state == ControlTransportState.disconnected ||
+        state == ControlTransportState.connecting ||
         state == ControlTransportState.reconnecting) {
       _markAllOffline(connection: connection);
     } else {
@@ -212,7 +213,7 @@ final class EswDeviceSdk {
           _records[channel.deviceId] = _recordFor(
             channel,
             previous,
-            online: true,
+            online: previous?.online ?? false,
             lastSeen: now,
             motorState: parseMotorState(envelope.payload),
             domainSequence: _domainSequence,
@@ -222,7 +223,7 @@ final class EswDeviceSdk {
           _records[channel.deviceId] = _recordFor(
             channel,
             previous,
-            online: true,
+            online: previous?.online ?? false,
             lastSeen: now,
             reading: parseAirQualityReading(envelope.payload, now),
             domainSequence: _domainSequence,
@@ -232,10 +233,13 @@ final class EswDeviceSdk {
           _records[channel.deviceId] = _recordFor(
             channel,
             previous,
-            online: true,
+            online: previous?.online ?? false,
             lastSeen: now,
           );
-          _pending.remove(parsed.commandId)?.complete(parsed.result);
+          final pending = _pending[parsed.commandId];
+          if (pending?.deviceId == channel.deviceId) {
+            _pending.remove(parsed.commandId)?.complete(parsed.result);
+          }
         default:
           return;
       }
@@ -291,7 +295,11 @@ final class EswDeviceSdk {
     final record = _records[deviceId];
     if (record == null || !record.online) return _offlineResult;
     final id = _newCommandId();
-    final pending = _PendingCommand(_commandTimeout, () => _pending.remove(id));
+    final pending = _PendingCommand(
+      deviceId,
+      _commandTimeout,
+      () => _pending.remove(id),
+    );
     _pending[id] = pending;
     try {
       await _transport.send(
@@ -383,12 +391,6 @@ final class EswDeviceSdk {
     if (_disposed) throw StateError('EswDeviceSdk has been disposed.');
   }
 
-  static SetupDevice _toSetupDevice(ProvisioningDevice device) =>
-      SetupDevice(id: device.id, name: device.name, rssi: device.rssi);
-
-  static ProvisioningDevice _toProvisioningDevice(SetupDevice device) =>
-      ProvisioningDevice(id: device.id, name: device.name, rssi: device.rssi);
-
   static bool _matchesProvisionedDevice(
     String provisioningName,
     String deviceId,
@@ -415,189 +417,20 @@ final class EswDeviceSdk {
   }
 }
 
-final class _DeviceSetupImpl implements DeviceSetup {
-  _DeviceSetupImpl(this._sdk, this.device, this._pop);
+/// Internal construction seam used by this package's deterministic tests.
+///
+/// This type is intentionally omitted from the public package barrel.
+final class SdkTestHarness {
+  const SdkTestHarness._();
 
-  final EswDeviceSdk _sdk;
-  final String _pop;
-  bool _completed = false;
-
-  @override
-  final SetupDevice device;
-
-  @override
-  Future<List<SetupWifiNetwork>> scanWifi() =>
-      _sdk._runSetupOperation(() async {
-        _checkUsable();
-        final networks = await _sdk._provisioning.scanWifi(
-          device: EswDeviceSdk._toProvisioningDevice(device),
-          pop: _pop,
-        );
-        return List.unmodifiable(
-          networks.map(
-            (network) => SetupWifiNetwork(
-              ssid: network.ssid,
-              rssi: network.rssi,
-              bssid: network.bssid,
-              isPrivate: network.private,
-            ),
-          ),
-        );
-      });
-
-  @override
-  Future<DeviceSetupResult> complete({
-    required SetupWifiNetwork network,
-    required String password,
-    void Function(DeviceSetupStep step)? onProgress,
-    Duration availabilityTimeout = const Duration(seconds: 20),
-  }) => _sdk._runSetupOperation(() async {
-    _checkUsable();
-    if (_sdk.currentState.connection != EswConnectionState.connected) {
-      throw const ConnectionException(
-        'Connect the control service before completing device setup.',
-      );
-    }
-    var baselineSequence = _sdk._domainSequence;
-    final result = await _sdk._provisioning.provision(
-      ProvisioningRequest(
-        device: EswDeviceSdk._toProvisioningDevice(device),
-        pop: _pop,
-        wifiSsid: network.ssid,
-        wifiPassword: password,
-        wifiBssid: network.bssid,
-      ),
-      onProgress: (step) {
-        if (step == ProvisioningStep.completed) {
-          baselineSequence = _sdk._domainSequence;
-          return;
-        }
-        final publicStep = switch (step) {
-          ProvisioningStep.connecting => DeviceSetupStep.connecting,
-          ProvisioningStep.checkingProtocol => DeviceSetupStep.checkingProtocol,
-          ProvisioningStep.securing => DeviceSetupStep.securing,
-          ProvisioningStep.applyingWifi => DeviceSetupStep.applyingWifi,
-          ProvisioningStep.waitingForWifi => DeviceSetupStep.waitingForWifi,
-          ProvisioningStep.completed => null,
-        };
-        if (publicStep != null) onProgress?.call(publicStep);
-      },
-    );
-    onProgress?.call(DeviceSetupStep.waitingForDevice);
-    final ready = await _sdk._waitForReadyDevice(
-      device.name,
-      baselineSequence,
-      availabilityTimeout,
-    );
-    _completed = true;
-    onProgress?.call(DeviceSetupStep.completed);
-    return DeviceSetupResult(device: ready, deviceIp: result.deviceIp);
-  });
-
-  void _checkUsable() {
-    _sdk._checkNotDisposed();
-    if (_completed) throw StateError('DeviceSetup has already completed.');
-  }
-}
-
-final class _MotorControllerImpl implements MotorController {
-  _MotorControllerImpl(this.id, this._sdk);
-
-  @override
-  final String id;
-  final EswDeviceSdk _sdk;
-
-  @override
-  Future<CommandResult> open() => _sdk._command(id, 'open');
-  @override
-  Future<CommandResult> close() => _sdk._command(id, 'close');
-  @override
-  Future<CommandResult> stop() => _sdk._command(id, 'stop');
-  @override
-  Future<CommandResult> ventilate() => _sdk._command(id, 'ventilate');
-  @override
-  Future<CommandResult> calibrate() => _sdk._command(id, 'calibrate');
-
-  @override
-  Future<CommandResult> setPosition({required double percent}) {
-    if (!percent.isFinite || percent < 0 || percent > 100) {
-      throw ArgumentError.value(
-        percent,
-        'percent',
-        'Must be between 0 and 100.',
-      );
-    }
-    return _sdk._command(
-      id,
-      'set_position',
-      position100ths: (percent * 100).round(),
-    );
-  }
-}
-
-final class _DeviceRecord {
-  const _DeviceRecord({
-    required this.id,
-    required this.kind,
-    required this.online,
-    required this.lastSeen,
-    required this.motorState,
-    required this.reading,
-    required this.domainSequence,
-  });
-
-  final String id;
-  final EswDeviceKind kind;
-  final bool online;
-  final DateTime lastSeen;
-  final MotorState? motorState;
-  final AirQualityReading? reading;
-  final int domainSequence;
-
-  EswDeviceSnapshot get snapshot => switch (kind) {
-    EswDeviceKind.motor => MotorDeviceSnapshot(
-      id: id,
-      isOnline: online,
-      lastSeen: lastSeen,
-      latestState: motorState,
-    ),
-    EswDeviceKind.airQualitySensor => AirQualityDeviceSnapshot(
-      id: id,
-      isOnline: online,
-      lastSeen: lastSeen,
-      latestReading: reading,
-    ),
-  };
-
-  _DeviceRecord copyWith({required bool online}) => _DeviceRecord(
-    id: id,
-    kind: kind,
-    online: online,
-    lastSeen: lastSeen,
-    motorState: motorState,
-    reading: reading,
-    domainSequence: domainSequence,
+  /// Builds the SDK around deterministic package-internal dependencies.
+  static EswDeviceSdk create({
+    required ControlTransport transport,
+    ProvisioningBackend? provisioning,
+    Duration commandTimeout = const Duration(seconds: 5),
+  }) => EswDeviceSdk._(
+    transport,
+    provisioning ?? EswProvisioner(),
+    commandTimeout,
   );
-}
-
-final class _PendingCommand {
-  _PendingCommand(Duration timeout, void Function() onTimeout) {
-    _timer = Timer(timeout, () {
-      if (_completer.isCompleted) return;
-      onTimeout();
-      _completer.complete(
-        const CommandResult(status: CommandStatus.timeout, revision: null),
-      );
-    });
-  }
-
-  final _completer = Completer<CommandResult>();
-  late final Timer _timer;
-  Future<CommandResult> get future => _completer.future;
-
-  void complete(CommandResult result) {
-    if (_completer.isCompleted) return;
-    _timer.cancel();
-    _completer.complete(result);
-  }
 }

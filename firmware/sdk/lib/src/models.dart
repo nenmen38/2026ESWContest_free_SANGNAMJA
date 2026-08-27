@@ -81,7 +81,7 @@ sealed class EswDeviceSnapshot {
   /// Device role inferred from the firmware identifier.
   final EswDeviceKind kind;
 
-  /// Whether the latest presence or domain message reports the device online.
+  /// Whether the latest presence message reports the device online.
   final bool isOnline;
 
   /// Time at which this application most recently received device data.
