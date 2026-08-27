@@ -1,0 +1,5 @@
+version: "0.1.0"
+description: "Project-local BME280 component"
+dependencies:
+  idf: ">=6.0"
+  espressif/bme280: "^0.1.1"

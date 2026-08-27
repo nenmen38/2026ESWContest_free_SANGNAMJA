@@ -1,0 +1,5 @@
+version: "0.1.0"
+description: "Non-blocking single-pixel RGB status LED for ESP32-C3 device nodes"
+dependencies:
+  idf: ">=6.0"
+  espressif/led_indicator: "^2.1.2"

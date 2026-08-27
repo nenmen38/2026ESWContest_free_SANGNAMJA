@@ -1,0 +1,6 @@
+version: "0.1.0"
+description: "Shared MQTT 5 transport for the motor and sensor nodes"
+dependencies:
+  idf: ">=6.0"
+  espressif/mqtt: "1.1.0"
+

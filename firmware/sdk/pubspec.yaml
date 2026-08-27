@@ -1,0 +1,24 @@
+name: esw_device_sdk
+description: High-level Flutter SDK for the ESW motor and air-quality devices.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+  flutter: '>=3.32.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  esp_provisioning_ble: 1.1.0
+  flutter_blue_plus: 2.3.12
+  mqtt_client: 10.11.11
+  permission_handler: ^11.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: false

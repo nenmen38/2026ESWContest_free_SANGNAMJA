@@ -1,0 +1,40 @@
+menu "Device BLE provisioning"
+
+    config DEVICE_PROV_POP
+        string "Security 1 proof of possession"
+        help
+            The production build must inject a unique value for every device.
+            An empty value is rejected at compile time.
+
+    config DEVICE_MQTT_URI
+        string "Default MQTT broker URI"
+        default ""
+        help
+            Required factory MQTT broker URI, including the mqtts:// scheme and
+            port. Inject it through the per-device build configuration.
+
+    config DEVICE_MQTT_USERNAME
+        string "Default MQTT device username"
+        default ""
+        help
+            Required factory device username. Store device-specific credentials
+            in the untracked sdkconfig file, not in sdkconfig.defaults.
+
+    config DEVICE_MQTT_PASSWORD
+        string "Default MQTT device password"
+        default ""
+        help
+            Required factory device password. This value is embedded in the
+            firmware image; use a unique, topic-restricted device account.
+
+    config DEVICE_PROV_RESET_GPIO
+        int "Provisioning reset GPIO"
+        range 0 21
+        default 9
+
+    config DEVICE_PROV_RESET_HOLD_MS
+        int "Reset button hold time (ms)"
+        range 1000 30000
+        default 5000
+
+endmenu
