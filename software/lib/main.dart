@@ -57,18 +57,26 @@ class _SmartWindowHomeState extends State<SmartWindowHome> {
 
   bool get _isLocked => _rainLock || _safetyStop;
 
-  void _openWindow() {
-    if (_isLocked) {
-      return;
+  double get _automaticOpenPercent {
+    if (_rainLock || _safetyStop) {
+      return 0;
     }
 
+    return 45;
+  }
+
+  void _openWindow() {
     setState(() {
-      _openPercent = 100;
+      _autoMode = false;
+      if (!_isLocked) {
+        _openPercent = 100;
+      }
     });
   }
 
   void _closeWindow() {
     setState(() {
+      _autoMode = false;
       _openPercent = 0;
     });
   }
@@ -83,6 +91,9 @@ class _SmartWindowHomeState extends State<SmartWindowHome> {
   void _toggleAutoMode() {
     setState(() {
       _autoMode = !_autoMode;
+      if (_autoMode) {
+        _openPercent = _automaticOpenPercent;
+      }
     });
   }
 
@@ -92,12 +103,6 @@ class _SmartWindowHomeState extends State<SmartWindowHome> {
       if (_rainLock) {
         _openPercent = 0;
       }
-    });
-  }
-
-  void _clearSafetyStop() {
-    setState(() {
-      _safetyStop = false;
     });
   }
 
@@ -146,9 +151,7 @@ class _SmartWindowHomeState extends State<SmartWindowHome> {
                           flex: 28,
                           child: _EnvironmentPanel(
                             rainLock: _rainLock,
-                            safetyStop: _safetyStop,
                             onRainTap: _toggleRainLock,
-                            onSafetyTap: _clearSafetyStop,
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -589,17 +592,10 @@ class _ActionButton extends StatelessWidget {
 }
 
 class _EnvironmentPanel extends StatelessWidget {
-  const _EnvironmentPanel({
-    required this.rainLock,
-    required this.safetyStop,
-    required this.onRainTap,
-    required this.onSafetyTap,
-  });
+  const _EnvironmentPanel({required this.rainLock, required this.onRainTap});
 
   final bool rainLock;
-  final bool safetyStop;
   final VoidCallback onRainTap;
-  final VoidCallback onSafetyTap;
 
   @override
   Widget build(BuildContext context) {
@@ -623,7 +619,7 @@ class _EnvironmentPanel extends StatelessWidget {
                   icon: Icons.cloud_outlined,
                   title: '실외',
                   value: '29.0°C',
-                  detail: rainLock ? '비 감지' : '비 없음',
+                  detail: rainLock ? '습도 71% · 비' : '습도 71%',
                   color: const Color(0xFFFF8A00),
                   onTap: onRainTap,
                 ),
@@ -647,14 +643,11 @@ class _EnvironmentPanel extends StatelessWidget {
               const SizedBox(height: 10),
               Expanded(
                 child: _InfoCard(
-                  icon: Icons.security_outlined,
-                  title: '안전',
-                  value: safetyStop ? '정지' : '정상',
-                  detail: safetyStop ? '탭해서 해제' : '모터 대기',
-                  color: safetyStop
-                      ? const Color(0xFFFF5A5F)
-                      : const Color(0xFF6B7684),
-                  onTap: safetyStop ? onSafetyTap : null,
+                  icon: Icons.grain,
+                  title: '미세먼지',
+                  value: '보통',
+                  detail: 'PM2.5 18㎍/㎥',
+                  color: const Color(0xFF6B7684),
                 ),
               ),
             ],
@@ -707,8 +700,9 @@ class _InfoCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: const Color(0xFF6B7684),
-                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF4E5968),
+                      fontWeight: FontWeight.w900,
+                      height: 1.1,
                     ),
                   ),
                 ),
@@ -721,6 +715,7 @@ class _InfoCard extends StatelessWidget {
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 color: const Color(0xFF191F28),
                 fontWeight: FontWeight.w900,
+                height: 1.05,
                 letterSpacing: 0,
               ),
             ),
@@ -728,9 +723,10 @@ class _InfoCard extends StatelessWidget {
               detail,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: const Color(0xFF8B95A1),
-                fontWeight: FontWeight.w700,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: const Color(0xFF4E5968),
+                fontWeight: FontWeight.w800,
+                height: 1.1,
               ),
             ),
           ],
