@@ -156,6 +156,7 @@ by the SDK.
 ## Documentation
 
 - Architecture and ownership: `doc/architecture.md`
+- Public API: `doc/public_api.md`
 - Provisioning and security: `doc/provisioning.md`
 - Troubleshooting: `doc/troubleshooting.md`
 - Changelog: `CHANGELOG.md`

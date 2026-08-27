@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'screens/settings_page.dart';
+
 void main() {
   runApp(const SmartWindowApp());
 }
@@ -42,6 +44,112 @@ class SmartWindowApp extends StatelessWidget {
   }
 }
 
+class EnvironmentSnapshot {
+  const EnvironmentSnapshot({
+    required this.indoor,
+    required this.outdoor,
+    required this.fineDust,
+    required this.updatedAtLabel,
+  });
+
+  const EnvironmentSnapshot.demo()
+    : indoor = const TemperatureHumidity(
+        temperatureC: 26.4,
+        humidityPercent: 58,
+      ),
+      outdoor = const TemperatureHumidity(
+        temperatureC: 29.0,
+        humidityPercent: 71,
+      ),
+      fineDust = const FineDust(pm25: 18),
+      updatedAtLabel = '오늘 15:20 업데이트';
+
+  final TemperatureHumidity indoor;
+  final TemperatureHumidity outdoor;
+  final FineDust fineDust;
+  final String updatedAtLabel;
+
+  factory EnvironmentSnapshot.fromJson(Map<String, dynamic> json) {
+    final indoorJson = _readMap(json['indoor']);
+    final outdoorJson = _readMap(json['outdoor']);
+    final fineDustJson = _readMap(json['fineDust']);
+
+    return EnvironmentSnapshot(
+      indoor: TemperatureHumidity(
+        temperatureC: _readDouble(indoorJson['temperatureC']),
+        humidityPercent: _readInt(indoorJson['humidityPercent']),
+      ),
+      outdoor: TemperatureHumidity(
+        temperatureC: _readDouble(outdoorJson['temperatureC']),
+        humidityPercent: _readInt(outdoorJson['humidityPercent']),
+      ),
+      fineDust: FineDust(pm25: _readInt(fineDustJson['pm25'])),
+      updatedAtLabel: json['updatedAtLabel'] as String? ?? '방금 업데이트',
+    );
+  }
+
+  static Map<String, dynamic> _readMap(Object? value) {
+    if (value is Map<String, dynamic>) {
+      return value;
+    }
+    return const {};
+  }
+
+  static double _readDouble(Object? value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+    if (value is String) {
+      return double.tryParse(value) ?? 0;
+    }
+    return 0;
+  }
+
+  static int _readInt(Object? value) {
+    if (value is num) {
+      return value.round();
+    }
+    if (value is String) {
+      return int.tryParse(value) ?? 0;
+    }
+    return 0;
+  }
+}
+
+class TemperatureHumidity {
+  const TemperatureHumidity({
+    required this.temperatureC,
+    required this.humidityPercent,
+  });
+
+  final double temperatureC;
+  final int humidityPercent;
+
+  String get temperatureLabel => '${temperatureC.toStringAsFixed(1)}°C';
+  String get humidityLabel => '습도 $humidityPercent%';
+}
+
+class FineDust {
+  const FineDust({required this.pm25});
+
+  final int pm25;
+
+  String get levelLabel {
+    if (pm25 <= 15) {
+      return '좋음';
+    }
+    if (pm25 <= 35) {
+      return '보통';
+    }
+    if (pm25 <= 75) {
+      return '나쁨';
+    }
+    return '매우 나쁨';
+  }
+
+  String get detailLabel => 'PM2.5 $pm25㎍/㎥';
+}
+
 class SmartWindowHome extends StatefulWidget {
   const SmartWindowHome({super.key});
 
@@ -54,6 +162,13 @@ class _SmartWindowHomeState extends State<SmartWindowHome> {
   bool _autoMode = true;
   bool _rainLock = true;
   bool _safetyStop = false;
+  EnvironmentSnapshot _environment = const EnvironmentSnapshot.demo();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEnvironment();
+  }
 
   bool get _isLocked => _rainLock || _safetyStop;
 
@@ -63,6 +178,22 @@ class _SmartWindowHomeState extends State<SmartWindowHome> {
     }
 
     return 45;
+  }
+
+  Future<void> _loadEnvironment() async {
+    final snapshot = await _fetchEnvironmentSnapshot();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _environment = snapshot;
+    });
+  }
+
+  // API 연결 시 이 함수에서 응답을 EnvironmentSnapshot으로 변환하면 됩니다.
+  Future<EnvironmentSnapshot> _fetchEnvironmentSnapshot() {
+    return Future.value(const EnvironmentSnapshot.demo());
   }
 
   void _openWindow() {
@@ -106,6 +237,24 @@ class _SmartWindowHomeState extends State<SmartWindowHome> {
     });
   }
 
+  void _openSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => SettingsPage(
+          controlModeLabel: _autoMode ? '자동' : '수동',
+          rainProtectionLabel: _rainLock ? '사용 중' : '해제',
+          safetyStopLabel: _safetyStop ? '활성' : '대기',
+          indoorEnvironmentLabel:
+              '${_environment.indoor.temperatureLabel} · ${_environment.indoor.humidityLabel}',
+          outdoorEnvironmentLabel:
+              '${_environment.outdoor.temperatureLabel} · ${_environment.outdoor.humidityLabel}',
+          fineDustLabel:
+              '${_environment.fineDust.levelLabel} · ${_environment.fineDust.detailLabel}',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -128,7 +277,9 @@ class _SmartWindowHomeState extends State<SmartWindowHome> {
                         _AppHeader(
                           isLocked: _isLocked,
                           autoMode: _autoMode,
+                          updatedAtLabel: _environment.updatedAtLabel,
                           onAutoTap: _toggleAutoMode,
+                          onSettingsTap: _openSettings,
                         ),
                         const SizedBox(height: 14),
                         Expanded(
@@ -150,6 +301,7 @@ class _SmartWindowHomeState extends State<SmartWindowHome> {
                         Expanded(
                           flex: 28,
                           child: _EnvironmentPanel(
+                            environment: _environment,
                             rainLock: _rainLock,
                             onRainTap: _toggleRainLock,
                           ),
@@ -173,12 +325,16 @@ class _AppHeader extends StatelessWidget {
   const _AppHeader({
     required this.isLocked,
     required this.autoMode,
+    required this.updatedAtLabel,
     required this.onAutoTap,
+    required this.onSettingsTap,
   });
 
   final bool isLocked;
   final bool autoMode;
+  final String updatedAtLabel;
   final VoidCallback onAutoTap;
+  final VoidCallback onSettingsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -199,7 +355,7 @@ class _AppHeader extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                '오늘 15:20 업데이트',
+                updatedAtLabel,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: const Color(0xFF8B95A1),
                   fontWeight: FontWeight.w600,
@@ -220,7 +376,45 @@ class _AppHeader extends StatelessWidget {
           label: isLocked ? '보호' : '정상',
           color: statusColor,
         ),
+        const SizedBox(width: 8),
+        _IconCircleButton(
+          icon: Icons.settings_outlined,
+          onTap: onSettingsTap,
+          tooltip: '설정',
+        ),
       ],
+    );
+  }
+}
+
+class _IconCircleButton extends StatelessWidget {
+  const _IconCircleButton({
+    required this.icon,
+    required this.onTap,
+    required this.tooltip,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Icon(icon, size: 21, color: const Color(0xFF4E5968)),
+        ),
+      ),
     );
   }
 }
@@ -592,8 +786,13 @@ class _ActionButton extends StatelessWidget {
 }
 
 class _EnvironmentPanel extends StatelessWidget {
-  const _EnvironmentPanel({required this.rainLock, required this.onRainTap});
+  const _EnvironmentPanel({
+    required this.environment,
+    required this.rainLock,
+    required this.onRainTap,
+  });
 
+  final EnvironmentSnapshot environment;
   final bool rainLock;
   final VoidCallback onRainTap;
 
@@ -608,8 +807,8 @@ class _EnvironmentPanel extends StatelessWidget {
                 child: _InfoCard(
                   icon: Icons.home_outlined,
                   title: '실내',
-                  value: '26.4°C',
-                  detail: '습도 58%',
+                  value: environment.indoor.temperatureLabel,
+                  detail: environment.indoor.humidityLabel,
                   color: const Color(0xFF3182F6),
                 ),
               ),
@@ -618,8 +817,10 @@ class _EnvironmentPanel extends StatelessWidget {
                 child: _InfoCard(
                   icon: Icons.cloud_outlined,
                   title: '실외',
-                  value: '29.0°C',
-                  detail: rainLock ? '습도 71% · 비' : '습도 71%',
+                  value: environment.outdoor.temperatureLabel,
+                  detail: rainLock
+                      ? '${environment.outdoor.humidityLabel} · 비'
+                      : environment.outdoor.humidityLabel,
                   color: const Color(0xFFFF8A00),
                   onTap: onRainTap,
                 ),
@@ -645,8 +846,8 @@ class _EnvironmentPanel extends StatelessWidget {
                 child: _InfoCard(
                   icon: Icons.grain,
                   title: '미세먼지',
-                  value: '보통',
-                  detail: 'PM2.5 18㎍/㎥',
+                  value: environment.fineDust.levelLabel,
+                  detail: environment.fineDust.detailLabel,
                   color: const Color(0xFF6B7684),
                 ),
               ),
