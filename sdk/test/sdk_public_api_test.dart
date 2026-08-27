@@ -5,12 +5,13 @@ import 'dart:convert';
 
 import 'package:esw_device_sdk/esw_device_sdk.dart';
 import 'package:esw_device_sdk/src/control_transport.dart';
+import 'package:esw_device_sdk/src/sdk.dart' show SdkTestHarness;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('states is seeded and combines connection with typed devices', () async {
     final transport = _FakeControlTransport();
-    final sdk = EswDeviceSdk.withTransportForTesting(transport);
+    final sdk = SdkTestHarness.create(transport: transport);
     addTearDown(sdk.dispose);
 
     expect(sdk.currentState.connection, EswConnectionState.disconnected);
@@ -29,7 +30,7 @@ void main() {
 
   test('disconnect marks devices offline and preserves domain data', () async {
     final transport = _FakeControlTransport();
-    final sdk = EswDeviceSdk.withTransportForTesting(transport);
+    final sdk = SdkTestHarness.create(transport: transport);
     addTearDown(sdk.dispose);
     transport.receive('v1/devices/sensor-aabb/telemetry', _telemetry);
     await Future<void>.delayed(Duration.zero);
@@ -41,9 +42,23 @@ void main() {
     expect(sensor.latestReading?.pm2_5, 13);
   });
 
+  test('retained motor state cannot override offline presence', () async {
+    final transport = _FakeControlTransport();
+    final sdk = SdkTestHarness.create(transport: transport);
+    addTearDown(sdk.dispose);
+
+    transport.receive('v1/devices/motor-aabb/presence', '{"status":"offline"}');
+    transport.receive('v1/devices/motor-aabb/state', _motorState);
+    await Future<void>.delayed(Duration.zero);
+
+    final motor = sdk.currentState.devices.single as MotorDeviceSnapshot;
+    expect(motor.isOnline, isFalse);
+    expect(motor.latestState?.currentPositionPercent, 25);
+  });
+
   test('application controls a motor without transport concepts', () async {
     final transport = _FakeControlTransport();
-    final sdk = EswDeviceSdk.withTransportForTesting(transport);
+    final sdk = SdkTestHarness.create(transport: transport);
     addTearDown(sdk.dispose);
     transport.receive('v1/devices/motor-aabb/presence', '{"status":"online"}');
     await Future<void>.delayed(Duration.zero);
@@ -67,7 +82,7 @@ void main() {
 
   test('setPosition validates percent before doing any I/O', () async {
     final transport = _FakeControlTransport();
-    final sdk = EswDeviceSdk.withTransportForTesting(transport);
+    final sdk = SdkTestHarness.create(transport: transport);
     addTearDown(sdk.dispose);
     expect(
       () => sdk.motor('motor-aabb').setPosition(percent: 100.1),
@@ -78,7 +93,7 @@ void main() {
 
   test('malformed data is isolated and reported', () async {
     final transport = _FakeControlTransport();
-    final sdk = EswDeviceSdk.withTransportForTesting(transport);
+    final sdk = SdkTestHarness.create(transport: transport);
     addTearDown(sdk.dispose);
     final error = sdk.errors.first;
     transport.receive('v1/devices/motor-aabb/state', '{bad-json');
@@ -87,7 +102,7 @@ void main() {
 
   test('only the matching command result completes a request', () async {
     final transport = _FakeControlTransport();
-    final sdk = EswDeviceSdk.withTransportForTesting(transport);
+    final sdk = SdkTestHarness.create(transport: transport);
     addTearDown(sdk.dispose);
     transport.receive('v1/devices/motor-aabb/presence', '{"status":"online"}');
     await Future<void>.delayed(Duration.zero);
@@ -115,9 +130,67 @@ void main() {
     expect((await request).status, CommandStatus.accepted);
   });
 
+  test('an event from another device cannot complete a command', () async {
+    final transport = _FakeControlTransport();
+    final sdk = SdkTestHarness.create(transport: transport);
+    addTearDown(sdk.dispose);
+    transport.receive('v1/devices/motor-aabb/presence', '{"status":"online"}');
+    await Future<void>.delayed(Duration.zero);
+
+    var completed = false;
+    final request = sdk.motor('motor-aabb').open()
+      ..then((_) => completed = true);
+    await Future<void>.delayed(Duration.zero);
+    final command = jsonDecode(transport.lastPayload!) as Map<String, dynamic>;
+    final event = jsonEncode({
+      'commandId': command['commandId'],
+      'result': 'accepted',
+      'revision': 4,
+    });
+    transport.receive('v1/devices/motor-ccdd/event', event);
+    await Future<void>.delayed(Duration.zero);
+    expect(completed, isFalse);
+
+    transport.receive('v1/devices/motor-aabb/event', event);
+    expect((await request).status, CommandStatus.accepted);
+  });
+
+  test('a different connection scope clears known devices', () async {
+    final transport = _FakeControlTransport();
+    final sdk = SdkTestHarness.create(transport: transport);
+    addTearDown(sdk.dispose);
+    await sdk.connect(_config);
+    transport.receive('v1/devices/motor-aabb/presence', '{"status":"online"}');
+    await Future<void>.delayed(Duration.zero);
+    expect(sdk.currentState.devices, hasLength(1));
+
+    await sdk.connect(
+      const EswConnectionConfig(
+        server: 'other.example.com',
+        account: 'other-app',
+        secret: 'other-secret',
+      ),
+    );
+
+    expect(sdk.currentState.devices, isEmpty);
+  });
+
+  test('the same connection scope preserves known devices', () async {
+    final transport = _FakeControlTransport();
+    final sdk = SdkTestHarness.create(transport: transport);
+    addTearDown(sdk.dispose);
+    await sdk.connect(_config);
+    transport.receive('v1/devices/motor-aabb/presence', '{"status":"online"}');
+    await Future<void>.delayed(Duration.zero);
+
+    await sdk.connect(_config);
+
+    expect(sdk.currentState.devices.single.id, 'motor-aabb');
+  });
+
   test('sensor telemetry is exposed in the atomic snapshot', () async {
     final transport = _FakeControlTransport();
-    final sdk = EswDeviceSdk.withTransportForTesting(transport);
+    final sdk = SdkTestHarness.create(transport: transport);
     addTearDown(sdk.dispose);
     transport.receive('v1/devices/sensor-aabb/telemetry', _telemetry);
     await Future<void>.delayed(Duration.zero);
@@ -129,8 +202,8 @@ void main() {
 
   test('a command without a correlated result times out', () async {
     final transport = _FakeControlTransport();
-    final sdk = EswDeviceSdk.withTransportForTesting(
-      transport,
+    final sdk = SdkTestHarness.create(
+      transport: transport,
       commandTimeout: const Duration(milliseconds: 5),
     );
     addTearDown(sdk.dispose);

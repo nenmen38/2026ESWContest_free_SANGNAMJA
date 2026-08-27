@@ -19,16 +19,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate SVG and PNG provisioning QR files without printing the PoP."
     )
-    identity = parser.add_mutually_exclusive_group(required=True)
-    identity.add_argument(
+    parser.add_argument(
         "--service-name",
+        required=True,
         help="advertised BLE name, for example PROV-MOTOR-A1B2",
     )
-    identity.add_argument(
-        "--mac",
-        help="Wi-Fi station MAC; requires --role and uses its final two bytes",
-    )
-    parser.add_argument("--role", choices=("motor", "sensor"))
     parser.add_argument(
         "--pop-env",
         metavar="NAME",
@@ -44,17 +39,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def service_name_from_args(args: argparse.Namespace) -> str:
-    if args.service_name:
-        if args.role:
-            raise ValueError("--role is only valid together with --mac")
-        service_name = args.service_name.upper()
-    else:
-        if not args.role:
-            raise ValueError("--role is required together with --mac")
-        compact_mac = re.sub(r"[^0-9A-Fa-f]", "", args.mac)
-        if len(compact_mac) != 12:
-            raise ValueError("--mac must contain exactly 12 hexadecimal digits")
-        service_name = f"PROV-{args.role.upper()}-{compact_mac[-4:].upper()}"
+    service_name = args.service_name.upper()
 
     if not SERVICE_NAME_RE.fullmatch(service_name):
         raise ValueError(

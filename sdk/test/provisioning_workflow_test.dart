@@ -3,8 +3,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:esp_provisioning_ble/esp_provisioning_ble.dart';
+import 'package:esw_device_sdk/esw_device_sdk.dart' show DeviceSetupStep;
 import 'package:esw_device_sdk/src/errors.dart';
-import 'package:esw_device_sdk/src/provisioning.dart';
+import 'package:esw_device_sdk/src/provisioning_workflow.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -12,17 +13,19 @@ void main() {
     final calls = <String>[];
     final transport = _FakeTransport(calls);
     final client = _FakeClient(calls);
-    final steps = <ProvisioningStep>[];
+    final steps = <DeviceSetupStep>[];
 
     final result = await ProvisioningWorkflow.run(
-      request: _request(),
+      pop: 'device-pop',
+      wifiSsid: 'wifi',
+      wifiPassword: 'password',
       transport: transport,
       createClient: (_, _) => client,
       onProgress: steps.add,
       pollInterval: Duration.zero,
     );
 
-    expect(result.deviceIp, '192.0.2.10');
+    expect(result, '192.0.2.10');
     expect(calls, [
       'connect',
       'proto-ver',
@@ -32,7 +35,7 @@ void main() {
       'wifi-status',
       'dispose',
     ]);
-    expect(steps.last, ProvisioningStep.completed);
+    expect(steps.last, DeviceSetupStep.waitingForWifi);
     expect(client.disposeCalls, 1);
   });
 
@@ -44,7 +47,9 @@ void main() {
     );
     await expectLater(
       ProvisioningWorkflow.run(
-        request: _request(),
+        pop: 'device-pop',
+        wifiSsid: 'wifi',
+        wifiPassword: 'password',
         transport: _FakeTransport(calls),
         createClient: (_, _) => client,
       ),
@@ -70,7 +75,9 @@ void main() {
     );
     await expectLater(
       ProvisioningWorkflow.run(
-        request: _request(),
+        pop: 'device-pop',
+        wifiSsid: 'wifi',
+        wifiPassword: 'password',
         transport: _FakeTransport(calls),
         createClient: (_, _) => client,
       ),
@@ -96,7 +103,9 @@ void main() {
     );
     await expectLater(
       ProvisioningWorkflow.run(
-        request: _request(),
+        pop: 'device-pop',
+        wifiSsid: 'wifi',
+        wifiPassword: 'password',
         transport: _FakeTransport(calls),
         createClient: (_, _) => client,
       ),
@@ -116,7 +125,9 @@ void main() {
     final client = _FakeClient(calls, sessionCompleter: Completer());
     await expectLater(
       ProvisioningWorkflow.run(
-        request: _request(),
+        pop: 'device-pop',
+        wifiSsid: 'wifi',
+        wifiPassword: 'password',
         transport: _FakeTransport(calls),
         createClient: (_, _) => client,
         operationTimeout: const Duration(milliseconds: 1),
@@ -132,17 +143,6 @@ void main() {
     expect(client.disposeCalls, 1);
   });
 }
-
-ProvisioningRequest _request() => ProvisioningRequest(
-  device: const ProvisioningDevice(
-    id: 'device',
-    name: 'PROV-MOTOR-0001',
-    rssi: -30,
-  ),
-  pop: 'device-pop',
-  wifiSsid: 'wifi',
-  wifiPassword: 'password',
-);
 
 final class _FakeTransport implements ProvTransport {
   _FakeTransport(this.calls);
