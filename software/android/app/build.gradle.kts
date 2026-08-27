@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.safe_smart_window_system"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

@@ -1,11 +1,17 @@
 import 'dart:math' as math;
 
+import 'package:esw_device_sdk/esw_device_sdk.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'app/sdk_scope.dart';
+import 'app/startup_gate.dart';
+import 'environment/environment_models.dart';
+import 'environment/environment_scope.dart';
 import 'screens/settings_page.dart';
 
 void main() {
-  runApp(const SmartWindowApp());
+  runApp(const ProviderScope(child: SmartWindowApp()));
 }
 
 class SmartWindowApp extends StatelessWidget {
@@ -39,217 +45,125 @@ class SmartWindowApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const SmartWindowHome(),
+      home: const StartupGate(home: SmartWindowHome()),
     );
   }
 }
 
-class EnvironmentSnapshot {
-  const EnvironmentSnapshot({
-    required this.indoor,
-    required this.outdoor,
-    required this.fineDust,
-    required this.updatedAtLabel,
-  });
-
-  const EnvironmentSnapshot.demo()
-    : indoor = const TemperatureHumidity(
-        temperatureC: 26.4,
-        humidityPercent: 58,
-      ),
-      outdoor = const TemperatureHumidity(
-        temperatureC: 29.0,
-        humidityPercent: 71,
-      ),
-      fineDust = const FineDust(pm25: 18),
-      updatedAtLabel = '오늘 15:20 업데이트';
-
-  final TemperatureHumidity indoor;
-  final TemperatureHumidity outdoor;
-  final FineDust fineDust;
-  final String updatedAtLabel;
-
-  factory EnvironmentSnapshot.fromJson(Map<String, dynamic> json) {
-    final indoorJson = _readMap(json['indoor']);
-    final outdoorJson = _readMap(json['outdoor']);
-    final fineDustJson = _readMap(json['fineDust']);
-
-    return EnvironmentSnapshot(
-      indoor: TemperatureHumidity(
-        temperatureC: _readDouble(indoorJson['temperatureC']),
-        humidityPercent: _readInt(indoorJson['humidityPercent']),
-      ),
-      outdoor: TemperatureHumidity(
-        temperatureC: _readDouble(outdoorJson['temperatureC']),
-        humidityPercent: _readInt(outdoorJson['humidityPercent']),
-      ),
-      fineDust: FineDust(pm25: _readInt(fineDustJson['pm25'])),
-      updatedAtLabel: json['updatedAtLabel'] as String? ?? '방금 업데이트',
-    );
-  }
-
-  static Map<String, dynamic> _readMap(Object? value) {
-    if (value is Map<String, dynamic>) {
-      return value;
-    }
-    return const {};
-  }
-
-  static double _readDouble(Object? value) {
-    if (value is num) {
-      return value.toDouble();
-    }
-    if (value is String) {
-      return double.tryParse(value) ?? 0;
-    }
-    return 0;
-  }
-
-  static int _readInt(Object? value) {
-    if (value is num) {
-      return value.round();
-    }
-    if (value is String) {
-      return int.tryParse(value) ?? 0;
-    }
-    return 0;
-  }
-}
-
-class TemperatureHumidity {
-  const TemperatureHumidity({
-    required this.temperatureC,
-    required this.humidityPercent,
-  });
-
-  final double temperatureC;
-  final int humidityPercent;
-
-  String get temperatureLabel => '${temperatureC.toStringAsFixed(1)}°C';
-  String get humidityLabel => '습도 $humidityPercent%';
-}
-
-class FineDust {
-  const FineDust({required this.pm25});
-
-  final int pm25;
-
-  String get levelLabel {
-    if (pm25 <= 15) {
-      return '좋음';
-    }
-    if (pm25 <= 35) {
-      return '보통';
-    }
-    if (pm25 <= 75) {
-      return '나쁨';
-    }
-    return '매우 나쁨';
-  }
-
-  String get detailLabel => 'PM2.5 $pm25㎍/㎥';
-}
-
-class SmartWindowHome extends StatefulWidget {
+class SmartWindowHome extends ConsumerStatefulWidget {
   const SmartWindowHome({super.key});
 
   @override
-  State<SmartWindowHome> createState() => _SmartWindowHomeState();
+  ConsumerState<SmartWindowHome> createState() => _SmartWindowHomeState();
 }
 
-class _SmartWindowHomeState extends State<SmartWindowHome> {
-  double _openPercent = 11;
+class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
+    with WidgetsBindingObserver {
   bool _autoMode = true;
-  bool _rainLock = true;
-  bool _safetyStop = false;
-  EnvironmentSnapshot _environment = const EnvironmentSnapshot.demo();
+  bool _commandBusy = false;
+  String? _latestActivity;
 
   @override
   void initState() {
     super.initState();
-    _loadEnvironment();
+    WidgetsBinding.instance.addObserver(this);
   }
 
-  bool get _isLocked => _rainLock || _safetyStop;
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
-  double get _automaticOpenPercent {
-    if (_rainLock || _safetyStop) {
-      return 0;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.invalidate(outdoorWeatherProvider);
     }
-
-    return 45;
   }
 
-  Future<void> _loadEnvironment() async {
-    final snapshot = await _fetchEnvironmentSnapshot();
-    if (!mounted) {
+  Future<void> _runCommand(
+    MotorDeviceSnapshot? motor,
+    Future<CommandResult> Function(MotorController controller) command,
+  ) async {
+    if (_commandBusy) return;
+    if (motor == null || !motor.isOnline) {
+      _showMessage('선택된 모터가 오프라인이거나 없습니다.');
       return;
     }
-
-    setState(() {
-      _environment = snapshot;
-    });
-  }
-
-  // API 연결 시 이 함수에서 응답을 EnvironmentSnapshot으로 변환하면 됩니다.
-  Future<EnvironmentSnapshot> _fetchEnvironmentSnapshot() {
-    return Future.value(const EnvironmentSnapshot.demo());
-  }
-
-  void _openWindow() {
     setState(() {
       _autoMode = false;
-      if (!_isLocked) {
-        _openPercent = 100;
-      }
+      _commandBusy = true;
     });
+    try {
+      final result = await command(ref.read(sdkProvider).motor(motor.id));
+      if (!mounted) return;
+      final message = switch (result.status) {
+        CommandStatus.accepted => '명령을 전송했습니다.',
+        CommandStatus.deviceOffline => '장치가 오프라인입니다.',
+        CommandStatus.safetyUnavailable => '안전 입력을 확인해 주세요.',
+        CommandStatus.positionUnknown => '위치 보정이 필요합니다.',
+        CommandStatus.hardwareRejected => '모터가 명령을 거부했습니다.',
+        CommandStatus.invalidCommand => '지원하지 않는 명령입니다.',
+        CommandStatus.duplicateCommand => '이미 처리된 명령입니다.',
+        CommandStatus.timeout => '장치 응답 시간이 초과되었습니다.',
+      };
+      setState(() => _latestActivity = message);
+      _showMessage(message);
+    } on Object catch (error) {
+      if (mounted) _showMessage('명령을 보내지 못했습니다: $error');
+    } finally {
+      if (mounted) setState(() => _commandBusy = false);
+    }
   }
 
-  void _closeWindow() {
-    setState(() {
-      _autoMode = false;
-      _openPercent = 0;
-    });
-  }
+  void _showMessage(String message) =>
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
 
-  void _stopWindow() {
-    setState(() {
-      _autoMode = false;
-      _safetyStop = true;
-    });
+  String _motorActivity(MotorDeviceSnapshot? motor) {
+    if (motor == null) return '설정에서 홈 모터를 선택해 주세요';
+    final state = motor.latestState;
+    if (state == null) return '모터의 첫 상태를 기다리는 중입니다';
+    final action = switch (state.mainState) {
+      MotorMainState.unknown => '상태 확인 중',
+      MotorMainState.idle => '대기',
+      MotorMainState.opening => '창문 여는 중',
+      MotorMainState.closing => '창문 닫는 중',
+      MotorMainState.ventilating => '환기 위치로 이동 중',
+      MotorMainState.stopping => '정지 중',
+      MotorMainState.calibrating => '위치 보정 중',
+      MotorMainState.fault => '모터 오류',
+      MotorMainState.protected => '보호 입력 활성',
+    };
+    final time =
+        '${motor.lastSeen.hour.toString().padLeft(2, '0')}:${motor.lastSeen.minute.toString().padLeft(2, '0')}';
+    return '$time · $action${motor.isOnline ? '' : ' · 오프라인'}';
   }
 
   void _toggleAutoMode() {
-    setState(() {
-      _autoMode = !_autoMode;
-      if (_autoMode) {
-        _openPercent = _automaticOpenPercent;
-      }
-    });
+    setState(() => _autoMode = !_autoMode);
   }
 
-  void _toggleRainLock() {
-    setState(() {
-      _rainLock = !_rainLock;
-      if (_rainLock) {
-        _openPercent = 0;
-      }
-    });
-  }
-
-  void _openSettings() {
+  void _openSettings(
+    EnvironmentSnapshot environment,
+    bool rainLock,
+    bool safetyStop,
+  ) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (context) => SettingsPage(
           controlModeLabel: _autoMode ? '자동' : '수동',
-          rainProtectionLabel: _rainLock ? '사용 중' : '해제',
-          safetyStopLabel: _safetyStop ? '활성' : '대기',
+          rainProtectionLabel: rainLock ? '비 감지' : '비 없음',
+          safetyStopLabel: safetyStop ? '활성' : '대기',
           indoorEnvironmentLabel:
-              '${_environment.indoor.temperatureLabel} · ${_environment.indoor.humidityLabel}',
+              '${environment.indoor.temperatureLabel} · ${environment.indoor.humidityLabel}',
           outdoorEnvironmentLabel:
-              '${_environment.outdoor.temperatureLabel} · ${_environment.outdoor.humidityLabel}',
-          fineDustLabel:
-              '${_environment.fineDust.levelLabel} · ${_environment.fineDust.detailLabel}',
+              '${environment.outdoor.temperatureLabel} · ${environment.outdoor.humidityLabel}',
+          indoorFineDustLabel:
+              '${environment.indoorFineDust.levelLabel} · ${environment.indoorFineDust.detailLabel}',
+          outdoorFineDustLabel:
+              '${environment.outdoorFineDust.levelLabel} · ${environment.outdoorFineDust.detailLabel}',
         ),
       ),
     );
@@ -257,6 +171,37 @@ class _SmartWindowHomeState extends State<SmartWindowHome> {
 
   @override
   Widget build(BuildContext context) {
+    final sdk = ref.watch(sdkProvider);
+    final sdkState = ref.watch(sdkStateProvider).value ?? sdk.currentState;
+    final selected =
+        ref.watch(selectedDeviceIdsProvider).value ?? const SelectedDeviceIds();
+    final motor = resolveMotor(sdkState, selected);
+    final sensor = resolveSensor(sdkState, selected);
+    final latestSensorReading = sensor?.latestReading;
+    final sensorFresh =
+        latestSensorReading != null &&
+        sensor?.isOnline == true &&
+        !latestSensorReading.hasSensorError &&
+        DateTime.now().difference(latestSensorReading.receivedAt) <=
+            const Duration(seconds: 15);
+    final weather =
+        ref.watch(outdoorWeatherProvider).value ??
+        const OutdoorWeatherStatus.loading();
+    final environment = EnvironmentSnapshot.fromSources(
+      indoor: sensorFresh ? latestSensorReading : null,
+      weather: weather,
+    );
+    final motorState = motor?.latestState;
+    final openPercent = motorState?.positionValid == true
+        ? motorState?.currentPositionPercent
+        : null;
+    final safetyStop =
+        motorState?.mainState == MotorMainState.protected ||
+        (motorState?.protectionState ?? 0) != 0 ||
+        (motorState?.hasError ?? false);
+    final rainLock = environment.isRaining;
+    final isLocked = rainLock || safetyStop;
+    final controlsEnabled = !_commandBusy && motor?.isOnline == true;
     return Scaffold(
       body: SafeArea(
         child: LayoutBuilder(
@@ -275,39 +220,49 @@ class _SmartWindowHomeState extends State<SmartWindowHome> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _AppHeader(
-                          isLocked: _isLocked,
+                          isLocked: isLocked,
                           autoMode: _autoMode,
-                          updatedAtLabel: _environment.updatedAtLabel,
+                          updatedAtLabel: environment.updatedAtLabel,
                           onAutoTap: _toggleAutoMode,
-                          onSettingsTap: _openSettings,
+                          onSettingsTap: () =>
+                              _openSettings(environment, rainLock, safetyStop),
                         ),
                         const SizedBox(height: 14),
                         Expanded(
                           flex: 38,
                           child: _HeroWindowCard(
-                            openPercent: _openPercent,
-                            isLocked: _isLocked,
-                            rainLock: _rainLock,
+                            openPercent: openPercent,
+                            isLocked: isLocked,
+                            rainLock: rainLock,
+                            motorOnline: motor?.isOnline == true,
                           ),
                         ),
                         const SizedBox(height: 12),
                         _QuickControls(
-                          isLocked: _isLocked,
-                          onOpen: _openWindow,
-                          onClose: _closeWindow,
-                          onStop: _stopWindow,
+                          isLocked: isLocked || !controlsEnabled,
+                          enabled: controlsEnabled,
+                          onOpen: () =>
+                              _runCommand(motor, (value) => value.open()),
+                          onClose: () =>
+                              _runCommand(motor, (value) => value.close()),
+                          onStop: () =>
+                              _runCommand(motor, (value) => value.stop()),
                         ),
                         const SizedBox(height: 12),
                         Expanded(
                           flex: 28,
                           child: _EnvironmentPanel(
-                            environment: _environment,
-                            rainLock: _rainLock,
-                            onRainTap: _toggleRainLock,
+                            environment: environment,
+                            rainLock: rainLock,
+                            weatherError: weather.error != null,
+                            onWeatherRefresh: () =>
+                                ref.invalidate(outdoorWeatherProvider),
                           ),
                         ),
                         const SizedBox(height: 12),
-                        const _LatestActivity(),
+                        _LatestActivity(
+                          text: _latestActivity ?? _motorActivity(motor),
+                        ),
                       ],
                     ),
                   ),
@@ -465,11 +420,13 @@ class _HeroWindowCard extends StatelessWidget {
     required this.openPercent,
     required this.isLocked,
     required this.rainLock,
+    required this.motorOnline,
   });
 
-  final double openPercent;
+  final double? openPercent;
   final bool isLocked;
   final bool rainLock;
+  final bool motorOnline;
 
   @override
   Widget build(BuildContext context) {
@@ -496,7 +453,7 @@ class _HeroWindowCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        '${openPercent.round()}%',
+                        openPercent == null ? '—' : '${openPercent!.round()}%',
                         style: Theme.of(context).textTheme.displayMedium
                             ?.copyWith(
                               color: const Color(0xFF191F28),
@@ -517,12 +474,14 @@ class _HeroWindowCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            Expanded(child: _WindowIllustration(openPercent: openPercent)),
+            Expanded(child: _WindowIllustration(openPercent: openPercent ?? 0)),
             const SizedBox(height: 12),
             Text(
               rainLock
                   ? '비가 감지되어 창문 열기를 제한하고 있습니다.'
-                  : '실내 공기 상태에 따라 바로 환기할 수 있습니다.',
+                  : motorOnline
+                  ? '연결된 모터의 실제 상태를 표시하고 있습니다.'
+                  : '모터 연결 또는 홈 장치 선택이 필요합니다.',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -693,12 +652,14 @@ class _SlidingGlassPanel extends StatelessWidget {
 class _QuickControls extends StatelessWidget {
   const _QuickControls({
     required this.isLocked,
+    required this.enabled,
     required this.onOpen,
     required this.onClose,
     required this.onStop,
   });
 
   final bool isLocked;
+  final bool enabled;
   final VoidCallback onOpen;
   final VoidCallback onClose;
   final VoidCallback onStop;
@@ -714,7 +675,7 @@ class _QuickControls extends StatelessWidget {
               icon: Icons.keyboard_arrow_down,
               label: '닫기',
               color: const Color(0xFF3182F6),
-              onTap: onClose,
+              onTap: enabled ? onClose : null,
             ),
           ),
           const SizedBox(width: 10),
@@ -723,7 +684,7 @@ class _QuickControls extends StatelessWidget {
               icon: Icons.stop_circle_outlined,
               label: '정지',
               color: const Color(0xFFFF5A5F),
-              onTap: onStop,
+              onTap: enabled ? onStop : null,
             ),
           ),
           const SizedBox(width: 10),
@@ -734,7 +695,7 @@ class _QuickControls extends StatelessWidget {
               color: isLocked
                   ? const Color(0xFFB0B8C1)
                   : const Color(0xFF3182F6),
-              onTap: isLocked ? null : onOpen,
+              onTap: isLocked || !enabled ? null : onOpen,
             ),
           ),
         ],
@@ -789,12 +750,14 @@ class _EnvironmentPanel extends StatelessWidget {
   const _EnvironmentPanel({
     required this.environment,
     required this.rainLock,
-    required this.onRainTap,
+    required this.weatherError,
+    required this.onWeatherRefresh,
   });
 
   final EnvironmentSnapshot environment;
   final bool rainLock;
-  final VoidCallback onRainTap;
+  final bool weatherError;
+  final VoidCallback onWeatherRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -818,11 +781,14 @@ class _EnvironmentPanel extends StatelessWidget {
                   icon: Icons.cloud_outlined,
                   title: '실외',
                   value: environment.outdoor.temperatureLabel,
-                  detail: rainLock
+                  detail:
+                      weatherError && environment.outdoor.temperatureC == null
+                      ? '눌러서 다시 시도'
+                      : rainLock
                       ? '${environment.outdoor.humidityLabel} · 비'
                       : environment.outdoor.humidityLabel,
                   color: const Color(0xFFFF8A00),
-                  onTap: onRainTap,
+                  onTap: onWeatherRefresh,
                 ),
               ),
             ],
@@ -845,9 +811,11 @@ class _EnvironmentPanel extends StatelessWidget {
               Expanded(
                 child: _InfoCard(
                   icon: Icons.grain,
-                  title: '미세먼지',
-                  value: environment.fineDust.levelLabel,
-                  detail: environment.fineDust.detailLabel,
+                  title: 'PM2.5 실내/외',
+                  value:
+                      '${environment.indoorFineDust.pm25?.round() ?? '—'} / ${environment.outdoorFineDust.pm25?.round() ?? '—'}',
+                  detail:
+                      '${environment.indoorFineDust.levelLabel} / ${environment.outdoorFineDust.levelLabel}',
                   color: const Color(0xFF6B7684),
                 ),
               ),
@@ -938,7 +906,9 @@ class _InfoCard extends StatelessWidget {
 }
 
 class _LatestActivity extends StatelessWidget {
-  const _LatestActivity();
+  const _LatestActivity({required this.text});
+
+  final String text;
 
   @override
   Widget build(BuildContext context) {
@@ -982,7 +952,7 @@ class _LatestActivity extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '15:20 · 강우 감지로 창문을 닫았습니다',
+                  text,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
