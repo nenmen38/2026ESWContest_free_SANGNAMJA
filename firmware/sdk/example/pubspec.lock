@@ -140,10 +140,9 @@ packages:
   esp_provisioning_ble:
     dependency: transitive
     description:
-      name: esp_provisioning_ble
-      sha256: "6111935a97070a64230edbc2bb725357808b20ac9c644954c23df6aac93319ad"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../third_party/esp_provisioning_ble"
+      relative: true
+    source: path
     version: "1.1.0"
   esw_device_sdk:
     dependency: "direct main"

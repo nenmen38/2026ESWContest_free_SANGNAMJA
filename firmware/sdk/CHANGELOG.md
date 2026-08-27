@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Vendored `esp_provisioning_ble 1.1.0` and modernized its Android bridge for
+  API 37, Java 17, and minimum API 23 compatibility.
 - Replaced separate connection and device feeds with seeded atomic SDK state.
 - Added typed motor and air-quality device snapshots.
 - Replaced direct provisioning access with guided `DeviceSetup` sessions.

@@ -56,6 +56,11 @@ does not prevent using it as a local path dependency.
 Android applications require API 23 or later. iOS applications require iOS 13
 or later. See `example/README.md` for permissions.
 
+The SDK vendors its `esp_provisioning_ble 1.1.0` dependency with Android API
+37 and Java 17 build compatibility. Consumer applications do not need to
+override that plugin in their own Gradle files; compile the host application
+with Android API 37 or later.
+
 ## Connect and observe
 
 Create one SDK for the application lifetime. Every `states` subscriber first

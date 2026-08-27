@@ -1,0 +1,18 @@
+group 'com.ogabrielinacio.esp_provisioning_ble'
+version '1.1.0-esw.1'
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.ogabrielinacio.esp_provisioning_ble'
+    compileSdk 37
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        minSdk 23
+    }
+}

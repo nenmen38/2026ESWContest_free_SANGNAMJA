@@ -10,7 +10,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  esp_provisioning_ble: 1.1.0
+  esp_provisioning_ble:
+    path: third_party/esp_provisioning_ble
   flutter_blue_plus: 2.3.12
   mqtt_client: 10.11.11
   permission_handler: ^11.0.0
