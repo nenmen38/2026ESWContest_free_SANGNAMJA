@@ -118,7 +118,6 @@ final class _FakeMotor implements MotorController {
   }
 
   @override
-  Future<CommandResult> calibrate() => _send('calibrate');
   @override
   Future<CommandResult> close() => _send('close');
   @override

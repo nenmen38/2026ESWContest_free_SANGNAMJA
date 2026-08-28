@@ -29,7 +29,7 @@ enum class DeviceConnectionState : uint8_t {
 inline constexpr uint32_t kPositionMin100ths = 0;
 inline constexpr uint32_t kPositionMax100ths = 10000;
 
-inline constexpr uint32_t kMotorErrorSafetyUnavailable = 1u << 0;
+inline constexpr uint32_t kMotorErrorFeedbackUnavailable = 1u << 0;
 inline constexpr uint32_t kMotorErrorPositionUnknown = 1u << 1;
 inline constexpr uint32_t kMotorErrorHardwareRejected = 1u << 2;
 
@@ -39,7 +39,6 @@ enum class MotorCommandAction : uint8_t {
     Stop,
     Ventilate,
     SetPosition,
-    Calibrate,
 };
 
 const char* motorCommandActionName(MotorCommandAction action);
@@ -120,17 +119,7 @@ enum class MotorMainState : uint8_t {
     Closing,
     Ventilating,
     Stopping,
-    Calibrating,
     Fault,
-    Protected,
-};
-
-enum class CalibrationState : uint8_t {
-    Unknown,
-    Required,
-    InProgress,
-    Complete,
-    Failed,
 };
 
 struct MotorCanonicalState {
@@ -138,8 +127,6 @@ struct MotorCanonicalState {
     uint32_t current_position100ths = 0;
     uint32_t target_position100ths = 0;
     uint32_t errors = 0;
-    CalibrationState calibration_state = CalibrationState::Unknown;
-    uint32_t protection_state = 0;
     bool position_valid = false;
     uint64_t revision = 0;
 };

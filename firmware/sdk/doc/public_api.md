@@ -83,14 +83,13 @@ import 'package:esw_device_sdk/esw_device_sdk.dart';
 
 | API | 설명 |
 | --- | --- |
-| `MotorMainState` | `unknown`, `idle`, `opening`, `closing`, `ventilating`, `stopping`, `calibrating`, `fault`, `protected` |
-| `MotorCalibrationState` | `unknown`, `required`, `inProgress`, `complete`, `failed` |
-| `MotorState` | 모터 동작 상태, 현재/목표 위치, 위치 신뢰 여부, 오류 플래그, 보정 상태, 보호 입력, revision |
+| `MotorMainState` | `unknown`, `idle`, `opening`, `closing`, `ventilating`, `stopping`, `fault` |
+| `MotorState` | 모터 동작 상태, 현재/목표 위치, 위치 신뢰 여부, 오류 플래그, revision |
 | `MotorState.hasError` | `errorFlags != 0`이면 `true` |
 
 `currentPositionPercent`는 위치가 유효하지 않을 때 `null`이다.
 `targetPositionPercent`는 0부터 100까지의 백분율 값이다. 실제 안전성,
-보정, 리미트 판단은 펌웨어가 최종 권한을 가진다.
+이동 범위와 위치 피드백 판단은 펌웨어가 최종 권한을 가진다.
 
 ### 공기질 상태
 
@@ -119,7 +118,6 @@ import 'package:esw_device_sdk/esw_device_sdk.dart';
 | `stop()` | 정지 요청 |
 | `ventilate()` | 펌웨어 설정 환기 위치로 이동 |
 | `setPosition({required double percent})` | 지정 위치로 이동 |
-| `calibrate()` | 보정 루틴 시작 |
 
 모든 명령은 `Future<CommandResult>`를 반환한다. 오프라인 장치에는 I/O를
 수행하지 않고 `deviceOffline`을 반환한다. 명령 이벤트는 SDK가 생성한
@@ -135,7 +133,7 @@ command ID와 대상 device ID가 모두 일치해야 완료된다. 일치하는
 | --- | --- |
 | `CommandStatus.accepted` | 장치가 명령을 수락함 |
 | `CommandStatus.deviceOffline` | 장치가 현재 도달 불가 |
-| `CommandStatus.safetyUnavailable` | 안전 피드백 미확립 |
+| `CommandStatus.feedbackUnavailable` | 최신 위치 피드백 미확립 |
 | `CommandStatus.positionUnknown` | 위치 피드백 미확립 |
 | `CommandStatus.hardwareRejected` | 모터 하드웨어 거부 |
 | `CommandStatus.invalidCommand` | 유효하지 않거나 지원하지 않는 명령 |

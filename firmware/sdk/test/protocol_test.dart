@@ -12,13 +12,12 @@ void main() {
     final state = parseMotorState('''
       {"mainState":"opening","currentPosition100ths":2500,
        "targetPosition100ths":10000,"positionValid":true,"errors":0,
-       "calibrationState":"complete","protectionState":0,"revision":12}
+       "revision":12}
     ''');
 
     expect(state.mainState, MotorMainState.opening);
     expect(state.currentPositionPercent, 25);
     expect(state.targetPositionPercent, 100);
-    expect(state.calibrationState, MotorCalibrationState.complete);
   });
 
   test('invalid position is rejected without accepting the message', () {
@@ -26,7 +25,7 @@ void main() {
       () => parseMotorState('''
         {"mainState":"idle","currentPosition100ths":10001,
          "targetPosition100ths":0,"positionValid":true,"errors":0,
-         "calibrationState":"complete","protectionState":0,"revision":1}
+         "revision":1}
       '''),
       throwsA(isA<DeviceDataException>()),
     );
@@ -102,7 +101,7 @@ void main() {
     const base =
         '"mainState":"idle","currentPosition100ths":0,'
         '"targetPosition100ths":0,"positionValid":true,"errors":0,'
-        '"calibrationState":"complete","protectionState":0,"revision":1';
+        '"revision":1';
     expect(
       () => parseMotorState('{$base,"schemaVersion":99}'),
       throwsA(isA<DeviceDataException>()),
@@ -117,7 +116,7 @@ void main() {
     const valid =
         '"mainState":"idle","currentPosition100ths":0,'
         '"targetPosition100ths":0,"positionValid":true,"errors":0,'
-        '"calibrationState":"complete","protectionState":0,"revision":1';
+        '"revision":1';
     for (final payload in [
       '{$valid}'.replaceFirst('"errors":0,', ''),
       '{$valid}'.replaceFirst('"errors":0', '"errors":"0"'),

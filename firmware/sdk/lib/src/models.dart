@@ -157,32 +157,8 @@ enum MotorMainState {
   /// A stop is in progress.
   stopping,
 
-  /// Calibration is in progress.
-  calibrating,
-
   /// The controller reports a hardware or service fault.
   fault,
-
-  /// A protection input prevents movement.
-  protected,
-}
-
-/// Calibration lifecycle reported by a motor device.
-enum MotorCalibrationState {
-  /// Calibration state is unavailable.
-  unknown,
-
-  /// Calibration must be completed before normal movement.
-  required,
-
-  /// Calibration is currently running.
-  inProgress,
-
-  /// Calibration completed successfully.
-  complete,
-
-  /// Calibration failed.
-  failed,
 }
 
 /// Latest canonical state reported by a motor device.
@@ -194,8 +170,6 @@ final class MotorState {
     required this.targetPositionPercent,
     required this.positionValid,
     required this.errorFlags,
-    required this.calibrationState,
-    required this.protectionState,
     required this.revision,
   });
 
@@ -214,12 +188,6 @@ final class MotorState {
   /// Firmware-defined error bit field.
   final int errorFlags;
 
-  /// Current calibration lifecycle.
-  final MotorCalibrationState calibrationState;
-
-  /// Firmware-defined protection-input bit field.
-  final int protectionState;
-
   /// Monotonically increasing state revision.
   final int revision;
 
@@ -235,8 +203,8 @@ enum CommandStatus {
   /// The device is not currently reachable.
   deviceOffline,
 
-  /// Required safety feedback is unavailable.
-  safetyUnavailable,
+  /// Fresh pulse position feedback is unavailable.
+  feedbackUnavailable,
 
   /// Required position feedback is unavailable.
   positionUnknown,

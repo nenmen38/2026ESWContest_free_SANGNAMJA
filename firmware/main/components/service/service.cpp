@@ -39,7 +39,8 @@ bool MotorService::begin()
     if (initialized_) {
         return true;
     }
-    if (config_.max_steps <= config_.min_steps || config_.safety_stale_after_ms == 0 ||
+    if (config_.min_steps != 0 || config_.max_steps <= config_.min_steps ||
+        config_.feedback_stale_after_ms == 0 ||
         !device_common::isPosition100thsValid(config_.ventilation_position100ths)) {
         ESP_LOGE(kTag, "invalid motor service position configuration");
         return false;
@@ -49,7 +50,6 @@ bool MotorService::begin()
     }
     state_ = device_common::MotorCanonicalState();
     state_.main_state = device_common::MotorMainState::Unknown;
-    state_.calibration_state = device_common::CalibrationState::Required;
     request_queue_ = xQueueCreate(kRequestQueueDepth, sizeof(Request*));
     if (request_queue_ == nullptr ||
         xTaskCreate(&MotorService::taskEntry, "motor_service", kWorkerStackSize,
@@ -65,13 +65,11 @@ bool MotorService::begin()
     return true;
 }
 
-bool MotorService::safetyInputsAvailable(uint64_t now_ms) const
+bool MotorService::positionFeedbackAvailable(uint64_t now_ms) const
 {
-    const auto& safety = feedback_.safety;
-    return safety.available && safety.limits_valid && safety.protection_valid &&
-           !safety.protection_active &&
-           now_ms >= safety.observed_at_ms &&
-           now_ms - safety.observed_at_ms <= config_.safety_stale_after_ms;
+    return feedback_.position_valid &&
+           now_ms >= feedback_.observed_at_ms &&
+           now_ms - feedback_.observed_at_ms <= config_.feedback_stale_after_ms;
 }
 
 void MotorService::updateStateFromMotion(uint32_t target_position100ths)
@@ -120,13 +118,11 @@ MotorCommandResult MotorService::reject(MotorCommandResult result,
     return result;
 }
 
-MotorCommandResult MotorService::rejectSafety()
+MotorCommandResult MotorService::rejectFeedbackUnavailable()
 {
-    return reject(MotorCommandResult::SafetyUnavailable,
-                  device_common::kMotorErrorSafetyUnavailable,
-                  feedback_.safety.protection_active
-                      ? device_common::MotorMainState::Protected
-                      : device_common::MotorMainState::Fault);
+    return reject(MotorCommandResult::FeedbackUnavailable,
+                  device_common::kMotorErrorFeedbackUnavailable,
+                  device_common::MotorMainState::Fault);
 }
 
 MotorCommandResult MotorService::processCommand(const device_common::MotorCommand& incoming,
@@ -162,8 +158,8 @@ MotorCommandResult MotorService::processCommand(const device_common::MotorComman
         return MotorCommandResult::Accepted;
 
     case device_common::MotorCommandAction::SetPosition:
-        if (!safetyInputsAvailable(now_ms)) {
-            return rejectSafety();
+        if (!positionFeedbackAvailable(now_ms)) {
+            return rejectFeedbackUnavailable();
         }
         state_.revision++;
         {
@@ -179,8 +175,8 @@ MotorCommandResult MotorService::processCommand(const device_common::MotorComman
         }
 
     case device_common::MotorCommandAction::Ventilate:
-        if (!safetyInputsAvailable(now_ms)) {
-            return rejectSafety();
+        if (!positionFeedbackAvailable(now_ms)) {
+            return rejectFeedbackUnavailable();
         }
         state_.revision++;
         {
@@ -195,8 +191,8 @@ MotorCommandResult MotorService::processCommand(const device_common::MotorComman
         }
 
     case device_common::MotorCommandAction::Open:
-        if (!safetyInputsAvailable(now_ms) || feedback_.safety.open_limit_active) {
-            return rejectSafety();
+        if (!positionFeedbackAvailable(now_ms)) {
+            return rejectFeedbackUnavailable();
         }
         if (!feedback_.position_valid) {
             return reject(MotorCommandResult::PositionUnknown,
@@ -207,8 +203,8 @@ MotorCommandResult MotorService::processCommand(const device_common::MotorComman
         return moveToPosition(device_common::kPositionMax100ths);
 
     case device_common::MotorCommandAction::Close:
-        if (!safetyInputsAvailable(now_ms) || feedback_.safety.close_limit_active) {
-            return rejectSafety();
+        if (!positionFeedbackAvailable(now_ms)) {
+            return rejectFeedbackUnavailable();
         }
         if (!feedback_.position_valid) {
             return reject(MotorCommandResult::PositionUnknown,
@@ -218,23 +214,6 @@ MotorCommandResult MotorService::processCommand(const device_common::MotorComman
         state_.revision++;
         return moveToPosition(device_common::kPositionMin100ths);
 
-    case device_common::MotorCommandAction::Calibrate:
-        if (!config_.homing_supported) {
-            ESP_LOGW(kTag, "calibration rejected: pulse-only mode has no home sensor");
-            return MotorCommandResult::InvalidCommand;
-        }
-        if (!safetyInputsAvailable(now_ms) || feedback_.safety.close_limit_active) {
-            return rejectSafety();
-        }
-        if (!motor_.runBackward()) {
-            return reject(MotorCommandResult::HardwareRejected,
-                          device_common::kMotorErrorHardwareRejected,
-                          device_common::MotorMainState::Fault);
-        }
-        state_.main_state = device_common::MotorMainState::Calibrating;
-        state_.calibration_state = device_common::CalibrationState::InProgress;
-        state_.revision++;
-        return MotorCommandResult::Accepted;
     }
 
     return MotorCommandResult::InvalidCommand;
@@ -243,75 +222,25 @@ MotorCommandResult MotorService::processCommand(const device_common::MotorComman
 void MotorService::processFeedback(const MotorFeedback& feedback)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    const uint32_t previous_protection_state = state_.protection_state;
     feedback_ = feedback;
     state_.position_valid = feedback_.position_valid;
     if (feedback_.position_valid) {
         state_.current_position100ths = feedback_.position100ths;
     }
-    if (feedback_.safety.protection_active || feedback_.homing_failed) {
-        motor_.emergencyStop();
-        state_.main_state = device_common::MotorMainState::Protected;
-        state_.protection_state = feedback_.safety.protection_state;
-        state_.errors |= device_common::kMotorErrorSafetyUnavailable |
-                         feedback_.safety.protection_state;
-        if (state_.calibration_state == device_common::CalibrationState::InProgress ||
-            feedback_.homing_failed) {
-            state_.calibration_state = device_common::CalibrationState::Failed;
-        }
+    if (feedback_.position_valid) {
+        state_.errors &= ~device_common::kMotorErrorFeedbackUnavailable;
+        state_.errors &= ~device_common::kMotorErrorPositionUnknown;
     } else {
-        state_.errors &= ~previous_protection_state;
-        state_.protection_state = feedback_.safety.protection_valid
-            ? feedback_.safety.protection_state : 0;
-        if (feedback_.safety.available) {
-            state_.errors &= ~device_common::kMotorErrorSafetyUnavailable;
-        }
-        if (feedback_.position_valid) {
-            state_.errors &= ~device_common::kMotorErrorPositionUnknown;
-        }
-        if (!feedback_.position_valid &&
-            state_.main_state != device_common::MotorMainState::Calibrating) {
-            state_.main_state = device_common::MotorMainState::Unknown;
-        } else if (feedback_.position_valid &&
-                   state_.main_state == device_common::MotorMainState::Protected) {
-            state_.main_state = device_common::MotorMainState::Idle;
-        }
-        const bool reached_target = feedback_.position_valid &&
-            feedback_.position100ths == state_.target_position100ths;
-        if (reached_target &&
-            (state_.main_state == device_common::MotorMainState::Opening ||
-             state_.main_state == device_common::MotorMainState::Closing ||
-             state_.main_state == device_common::MotorMainState::Ventilating)) {
-            state_.main_state = device_common::MotorMainState::Idle;
-        }
+        state_.main_state = device_common::MotorMainState::Unknown;
     }
-
-    const bool opening_into_limit = feedback_.safety.open_limit_active &&
+    const bool reached_target = feedback_.position_valid &&
+        feedback_.position100ths == state_.target_position100ths;
+    if (reached_target &&
         (state_.main_state == device_common::MotorMainState::Opening ||
-         state_.main_state == device_common::MotorMainState::Unknown);
-    const bool closing_into_limit = feedback_.safety.close_limit_active &&
-        (state_.main_state == device_common::MotorMainState::Closing ||
-         state_.main_state == device_common::MotorMainState::Calibrating ||
-         state_.main_state == device_common::MotorMainState::Unknown);
-    if (opening_into_limit || closing_into_limit) {
-        motor_.emergencyStop();
-        if (feedback_.safety.open_limit_active) {
-            motor_.setPositionSteps(config_.max_steps);
-            feedback_.position_valid = true;
-            feedback_.position100ths = device_common::kPositionMax100ths;
-        } else {
-            motor_.setPositionSteps(config_.min_steps);
-            feedback_.position_valid = true;
-            feedback_.position100ths = device_common::kPositionMin100ths;
-            if (state_.calibration_state == device_common::CalibrationState::InProgress ||
-                state_.calibration_state == device_common::CalibrationState::Required) {
-                state_.calibration_state = device_common::CalibrationState::Complete;
-            }
-        }
-        state_.position_valid = true;
-        state_.current_position100ths = feedback_.position100ths;
+         state_.main_state == device_common::MotorMainState::Closing ||
+         state_.main_state == device_common::MotorMainState::Ventilating ||
+         state_.main_state == device_common::MotorMainState::Unknown)) {
         state_.main_state = device_common::MotorMainState::Idle;
-        state_.target_position100ths = state_.current_position100ths;
     }
     state_.revision++;
 }

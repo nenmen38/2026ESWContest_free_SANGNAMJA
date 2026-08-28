@@ -38,59 +38,16 @@ MotorServiceConfig makeServiceConfig()
     config.min_steps = 0;
     config.max_steps = CONFIG_MOTOR_FULL_TRAVEL_STEPS;
     config.ventilation_position100ths = CONFIG_MOTOR_VENTILATION_POSITION_100THS;
-    config.safety_stale_after_ms = CONFIG_MOTOR_SAFETY_STALE_MS;
-#ifdef CONFIG_MOTOR_FEEDBACK_MODE_LIMIT_HOME
-    config.homing_supported = true;
-#else
-    config.homing_supported = false;
-#endif
+    config.feedback_stale_after_ms = CONFIG_MOTOR_FEEDBACK_STALE_MS;
     return config;
 }
 
 MotorFeedbackInputConfig makeFeedbackConfig()
 {
     MotorFeedbackInputConfig config;
-#ifdef CONFIG_MOTOR_FEEDBACK_MODE_LIMIT_HOME
-    config.mode = MotorFeedbackMode::LimitHome;
-    config.open_limit_gpio = CONFIG_MOTOR_OPEN_LIMIT_GPIO;
-    config.close_limit_gpio = CONFIG_MOTOR_CLOSE_LIMIT_GPIO;
-    config.protection_gpio = CONFIG_MOTOR_PROTECTION_GPIO;
-#else
-    config.mode = MotorFeedbackMode::PulseOnly;
-#endif
-    config.step_gpio = CONFIG_MOTOR_STEP_GPIO;
-    config.dir_gpio = CONFIG_MOTOR_DIR_GPIO;
-    config.status_led_gpio = 8;
-    config.reset_gpio = CONFIG_DEVICE_PROV_RESET_GPIO;
     config.min_steps = 0;
     config.max_steps = CONFIG_MOTOR_FULL_TRAVEL_STEPS;
     config.sample_period_ms = CONFIG_MOTOR_FEEDBACK_PERIOD_MS;
-#ifdef CONFIG_MOTOR_FEEDBACK_MODE_LIMIT_HOME
-    config.debounce_ms = CONFIG_MOTOR_FEEDBACK_DEBOUNCE_MS;
-#ifdef CONFIG_MOTOR_AUTO_HOME
-    config.homing_timeout_ms = CONFIG_MOTOR_HOMING_TIMEOUT_MS;
-    config.auto_home = true;
-#else
-    config.auto_home = false;
-#endif
-#ifdef CONFIG_MOTOR_LIMIT_ACTIVE_LOW
-    config.limit_active_low = true;
-#else
-    config.limit_active_low = false;
-#endif
-#ifdef CONFIG_MOTOR_PROTECTION_ACTIVE_HIGH
-    config.protection_active_high = true;
-#else
-    config.protection_active_high = false;
-#endif
-#ifdef CONFIG_MOTOR_FEEDBACK_USE_PULLUP
-    config.use_pullup = true;
-#else
-    config.use_pullup = false;
-#endif
-#else
-    config.auto_home = false;
-#endif
     return config;
 }
 
@@ -126,8 +83,7 @@ void showProvisioningResetFailure(void* context)
 
 void updateMotorLed(StatusLed& led, const device_common::MotorCanonicalState& state)
 {
-    if (state.errors != 0 || state.main_state == device_common::MotorMainState::Fault ||
-        state.main_state == device_common::MotorMainState::Protected) {
+    if (state.errors != 0 || state.main_state == device_common::MotorMainState::Fault) {
         led.set(StatusLedLayer::Fault, StatusLedSignal::RedBlink);
         led.clear(StatusLedLayer::Device);
         return;
@@ -146,7 +102,6 @@ void updateMotorLed(StatusLed& led, const device_common::MotorCanonicalState& st
     case device_common::MotorMainState::Ventilating:
         led.set(StatusLedLayer::Device, StatusLedSignal::CyanSolid);
         break;
-    case device_common::MotorMainState::Calibrating:
     case device_common::MotorMainState::Stopping:
         led.set(StatusLedLayer::Device, StatusLedSignal::YellowBlink);
         break;
@@ -154,7 +109,6 @@ void updateMotorLed(StatusLed& led, const device_common::MotorCanonicalState& st
         led.set(StatusLedLayer::Device, StatusLedSignal::AmberBreathe);
         break;
     case device_common::MotorMainState::Fault:
-    case device_common::MotorMainState::Protected:
         break;
     }
 }

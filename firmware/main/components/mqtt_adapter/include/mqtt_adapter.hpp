@@ -32,7 +32,6 @@ private:
     void handleCommand(std::string_view payload, bool retained);
     void publishResult(std::string_view command_id, MotorCommandResult result);
     static const char* stateName(device_common::MotorMainState state);
-    static const char* calibrationName(device_common::CalibrationState state);
     static const char* resultName(MotorCommandResult result);
 
     MotorService& service_;

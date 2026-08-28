@@ -101,8 +101,8 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
       final message = switch (result.status) {
         CommandStatus.accepted => '명령을 전송했습니다.',
         CommandStatus.deviceOffline => '장치가 오프라인입니다.',
-        CommandStatus.safetyUnavailable => '안전 입력을 확인해 주세요.',
-        CommandStatus.positionUnknown => '위치 보정이 필요합니다.',
+        CommandStatus.feedbackUnavailable => '모터 위치 피드백을 기다리는 중입니다.',
+        CommandStatus.positionUnknown => '모터 위치를 확인할 수 없습니다.',
         CommandStatus.hardwareRejected => '모터가 명령을 거부했습니다.',
         CommandStatus.invalidCommand => '지원하지 않는 명령입니다.',
         CommandStatus.duplicateCommand => '이미 처리된 명령입니다.',
@@ -132,9 +132,7 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
       MotorMainState.closing => '창문 닫는 중',
       MotorMainState.ventilating => '환기 위치로 이동 중',
       MotorMainState.stopping => '정지 중',
-      MotorMainState.calibrating => '위치 보정 중',
       MotorMainState.fault => '모터 오류',
-      MotorMainState.protected => '보호 입력 활성',
     };
     final time =
         '${motor.lastSeen.hour.toString().padLeft(2, '0')}:${motor.lastSeen.minute.toString().padLeft(2, '0')}';
@@ -214,10 +212,7 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
     final openPercent = motorState?.positionValid == true
         ? motorState?.currentPositionPercent
         : null;
-    final safetyStop =
-        motorState?.mainState == MotorMainState.protected ||
-        (motorState?.protectionState ?? 0) != 0 ||
-        (motorState?.hasError ?? false);
+    final safetyStop = motorState?.hasError ?? false;
     final rainLock = environment.isRaining;
     final isLocked = rainLock || safetyStop;
     final controlsEnabled = !_commandBusy && motor?.isOnline == true;

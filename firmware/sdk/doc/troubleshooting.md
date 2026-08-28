@@ -32,7 +32,7 @@ host and chain to a trusted public root.
 
 ## Motor command is rejected
 
-- `safetyUnavailable`: limit or protection feedback has not been established.
+- `feedbackUnavailable`: fresh pulse position feedback has not been established.
 - `positionUnknown`: valid position feedback is absent.
 - `hardwareRejected`: the motion driver rejected the target.
 - `timeout`: the SDK did not receive a matching event in five seconds. Do not

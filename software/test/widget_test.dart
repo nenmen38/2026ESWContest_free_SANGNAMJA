@@ -199,8 +199,6 @@ FakeEswDeviceSdk readySdk() {
         targetPositionPercent: 25,
         positionValid: true,
         errorFlags: 0,
-        calibrationState: MotorCalibrationState.complete,
-        protectionState: 0,
         revision: 1,
       ),
     ),

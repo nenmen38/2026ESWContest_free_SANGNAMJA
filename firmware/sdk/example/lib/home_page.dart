@@ -203,8 +203,8 @@ class _MotorPanelState extends State<_MotorPanel> {
     final message = switch (result.status) {
       CommandStatus.accepted => '명령을 전송했습니다.',
       CommandStatus.deviceOffline => '장치가 오프라인입니다.',
-      CommandStatus.safetyUnavailable => '리미트 또는 보호 입력을 확인하세요.',
-      CommandStatus.positionUnknown => '홈잉이 완료되지 않았습니다.',
+      CommandStatus.feedbackUnavailable => '모터 위치 피드백을 기다리는 중입니다.',
+      CommandStatus.positionUnknown => '모터 위치를 확인할 수 없습니다.',
       CommandStatus.hardwareRejected => '모터가 명령을 거부했습니다.',
       CommandStatus.invalidCommand => '유효하지 않은 명령입니다.',
       CommandStatus.duplicateCommand => '이미 처리된 명령입니다.',

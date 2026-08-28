@@ -18,7 +18,6 @@ bool isKnownAction(MotorCommandAction action)
     case MotorCommandAction::Stop:
     case MotorCommandAction::Ventilate:
     case MotorCommandAction::SetPosition:
-    case MotorCommandAction::Calibrate:
         return true;
     }
     return false;
@@ -67,8 +66,6 @@ const char* motorCommandActionName(MotorCommandAction action)
         return "ventilate";
     case MotorCommandAction::SetPosition:
         return "set_position";
-    case MotorCommandAction::Calibrate:
-        return "calibrate";
     }
     return "unknown";
 }

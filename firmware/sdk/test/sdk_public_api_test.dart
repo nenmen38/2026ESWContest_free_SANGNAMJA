@@ -224,7 +224,7 @@ const _config = EswConnectionConfig(
 const _motorState = '''
 {"mainState":"idle","currentPosition100ths":2500,
  "targetPosition100ths":2500,"positionValid":true,"errors":0,
- "calibrationState":"complete","protectionState":0,"revision":3}
+ "revision":3}
 ''';
 
 const _telemetry = '''

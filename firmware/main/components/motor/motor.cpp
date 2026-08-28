@@ -242,33 +242,6 @@ bool MotorController::ready(const char* operation) const
     return false;
 }
 
-bool MotorController::moveSteps(int32_t steps)
-{
-    if (!ready("moveSteps")) return false;
-    if (steps == 0) {
-        ESP_LOGW(TAG, "moveSteps called with zero steps");
-        return true;
-    }
-
-    const int64_t target = static_cast<int64_t>(getPosition()) + steps;
-    if (!validateMoveTarget(target)) {
-        ESP_LOGE(TAG, "move target overflow: current=%ld steps=%ld",
-                 static_cast<long>(getPosition()), static_cast<long>(steps));
-        return false;
-    }
-
-    const MoveResultCode result = stepper_->move(steps, false);
-    if (result != MOVE_OK) {
-        ESP_LOGE(TAG, "FastAccelStepper rejected move steps=%ld result=%d",
-                 static_cast<long>(steps), static_cast<int>(result));
-        return false;
-    }
-
-    ESP_LOGI(TAG, "move steps=%ld target position=%ld",
-             static_cast<long>(steps), static_cast<long>(target));
-    return true;
-}
-
 bool MotorController::moveTo(int32_t absolute_steps)
 {
     if (!ready("moveTo")) return false;
@@ -285,34 +258,6 @@ bool MotorController::moveTo(int32_t absolute_steps)
     return true;
 }
 
-bool MotorController::runForward()
-{
-    if (!ready("runForward")) return false;
-
-    const MoveResultCode result = stepper_->runForward();
-    if (result != MOVE_OK) {
-        ESP_LOGE(TAG, "FastAccelStepper rejected forward run result=%d",
-                 static_cast<int>(result));
-        return false;
-    }
-    ESP_LOGI(TAG, "continuous forward run started");
-    return true;
-}
-
-bool MotorController::runBackward()
-{
-    if (!ready("runBackward")) return false;
-
-    const MoveResultCode result = stepper_->runBackward();
-    if (result != MOVE_OK) {
-        ESP_LOGE(TAG, "FastAccelStepper rejected backward run result=%d",
-                 static_cast<int>(result));
-        return false;
-    }
-    ESP_LOGI(TAG, "continuous backward run started");
-    return true;
-}
-
 void MotorController::stop()
 {
     if (!initialized_ || stepper_ == nullptr) {
@@ -323,17 +268,6 @@ void MotorController::stop()
     // stopMove() is asynchronous and applies the configured deceleration.
     stepper_->stopMove();
     ESP_LOGI(TAG, "stop requested at position=%ld",
-             static_cast<long>(getPosition()));
-}
-
-void MotorController::emergencyStop()
-{
-    if (!initialized_ || stepper_ == nullptr) {
-        ESP_LOGW(TAG, "emergencyStop called before begin()");
-        return;
-    }
-    stepper_->forceStop();
-    ESP_LOGW(TAG, "emergency stop at position=%ld",
              static_cast<long>(getPosition()));
 }
 

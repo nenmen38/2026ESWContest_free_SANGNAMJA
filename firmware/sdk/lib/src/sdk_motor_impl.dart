@@ -16,9 +16,6 @@ final class _MotorControllerImpl implements MotorController {
   @override
   Future<CommandResult> ventilate() => _sdk._command(id, 'ventilate');
   @override
-  Future<CommandResult> calibrate() => _sdk._command(id, 'calibrate');
-
-  @override
   Future<CommandResult> setPosition({required double percent}) {
     if (!percent.isFinite || percent < 0 || percent > 100) {
       throw ArgumentError.value(

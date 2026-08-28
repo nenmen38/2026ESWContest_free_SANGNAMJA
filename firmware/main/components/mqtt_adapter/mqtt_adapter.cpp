@@ -20,7 +20,6 @@ bool actionFromName(const char* name, device_common::MotorCommandAction* output)
     else if (std::strcmp(name, "stop") == 0) *output = device_common::MotorCommandAction::Stop;
     else if (std::strcmp(name, "ventilate") == 0) *output = device_common::MotorCommandAction::Ventilate;
     else if (std::strcmp(name, "set_position") == 0) *output = device_common::MotorCommandAction::SetPosition;
-    else if (std::strcmp(name, "calibrate") == 0) *output = device_common::MotorCommandAction::Calibrate;
     else return false;
     return true;
 }
@@ -146,8 +145,6 @@ void MotorMqttAdapter::report(const device_common::MotorCanonicalState& state, b
     ok = ok && json_gen_obj_set_int64(&generator, "targetPosition100ths", state.target_position100ths) == 0;
     ok = ok && json_gen_obj_set_bool(&generator, "positionValid", state.position_valid) == 0;
     ok = ok && json_gen_obj_set_int64(&generator, "errors", state.errors) == 0;
-    ok = ok && json_gen_obj_set_string(&generator, "calibrationState", calibrationName(state.calibration_state)) == 0;
-    ok = ok && json_gen_obj_set_int64(&generator, "protectionState", state.protection_state) == 0;
     ok = ok && json_gen_obj_set_int64(&generator, "revision", static_cast<int64_t>(state.revision)) == 0;
     ok = ok && json_gen_end_object(&generator) == 0;
     std::size_t length = 0;
@@ -216,21 +213,7 @@ const char* MotorMqttAdapter::stateName(device_common::MotorMainState state)
     case device_common::MotorMainState::Closing: return "closing";
     case device_common::MotorMainState::Ventilating: return "ventilating";
     case device_common::MotorMainState::Stopping: return "stopping";
-    case device_common::MotorMainState::Calibrating: return "calibrating";
     case device_common::MotorMainState::Fault: return "fault";
-    case device_common::MotorMainState::Protected: return "protected";
-    }
-    return "unknown";
-}
-
-const char* MotorMqttAdapter::calibrationName(device_common::CalibrationState state)
-{
-    switch (state) {
-    case device_common::CalibrationState::Unknown: return "unknown";
-    case device_common::CalibrationState::Required: return "required";
-    case device_common::CalibrationState::InProgress: return "in_progress";
-    case device_common::CalibrationState::Complete: return "complete";
-    case device_common::CalibrationState::Failed: return "failed";
     }
     return "unknown";
 }
@@ -241,7 +224,7 @@ const char* MotorMqttAdapter::resultName(MotorCommandResult result)
     case MotorCommandResult::Accepted: return "accepted";
     case MotorCommandResult::InvalidCommand: return "invalid_command";
     case MotorCommandResult::DuplicateCommand: return "duplicate_command";
-    case MotorCommandResult::SafetyUnavailable: return "safety_unavailable";
+    case MotorCommandResult::FeedbackUnavailable: return "feedback_unavailable";
     case MotorCommandResult::PositionUnknown: return "position_unknown";
     case MotorCommandResult::HardwareRejected: return "hardware_rejected";
     }

@@ -29,9 +29,9 @@ struct MotorConfig {
 /**
  * @brief Non-blocking step/direction motor controller.
  *
- * Position values are step/pulse counts.  Window percentages, homing,
- * calibration, sensors, and network protocol handling belong in a higher
- * layer such as WindowController.  After begin(), keep this object alive for
+ * Position values are step/pulse counts. Window percentages, sensors, and
+ * network protocol handling belong in a higher layer such as WindowController.
+ * After begin(), keep this object alive for
  * the lifetime of the application because FastAccelStepper owns a background
  * task and 1.2.7 does not expose an engine deinitialization API.
  */
@@ -48,17 +48,10 @@ public:
     bool setSpeedRPM(float rpm);
     bool setAcceleration(uint32_t steps_per_sec2);
 
-    bool moveSteps(int32_t steps);
     bool moveTo(int32_t absolute_steps);
-
-    bool runForward();
-    bool runBackward();
 
     /** @brief Stop with FastAccelStepper's normal deceleration ramp. */
     void stop();
-
-    /** @brief Immediately stop pulse output for a limit or protection event. */
-    void emergencyStop();
 
     bool isRunning() const;
 

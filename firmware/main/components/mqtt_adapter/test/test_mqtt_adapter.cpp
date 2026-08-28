@@ -11,13 +11,12 @@ TEST_CASE("all motor MQTT actions parse", "[mqtt_adapter]")
         const char* name;
         device_common::MotorCommandAction action;
     };
-    constexpr std::array<Case, 6> cases{{
+    constexpr std::array<Case, 5> cases{{
         {"open", device_common::MotorCommandAction::Open},
         {"close", device_common::MotorCommandAction::Close},
         {"stop", device_common::MotorCommandAction::Stop},
         {"ventilate", device_common::MotorCommandAction::Ventilate},
         {"set_position", device_common::MotorCommandAction::SetPosition},
-        {"calibrate", device_common::MotorCommandAction::Calibrate},
     }};
     for (const auto& item : cases) {
         char json[160] = {};
@@ -30,6 +29,14 @@ TEST_CASE("all motor MQTT actions parse", "[mqtt_adapter]")
         TEST_ASSERT_EQUAL_UINT64(123, parsed.command.metadata.received_at_ms);
         TEST_ASSERT_EQUAL_STRING("id-1", parsed.command_id.data());
     }
+}
+
+TEST_CASE("calibrate is not a supported motor MQTT action", "[mqtt_adapter]")
+{
+    ParsedMotorMqttCommand command;
+    TEST_ASSERT_FALSE(parseMotorMqttCommand(
+        "{\"commandId\":\"id\",\"action\":\"calibrate\",\"ttlMs\":1000}",
+        0, &command));
 }
 
 TEST_CASE("set position requires a bounded position", "[mqtt_adapter]")

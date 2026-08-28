@@ -3,55 +3,22 @@
 ESP32-C3 motor node using BLE Security 1 provisioning and MQTT 5 over TLS.
 `MotorService` remains the protocol-independent command/state boundary and the
 local `MotorMqttAdapter` only translates JSON. Position-changing commands require
-the position and safety state supplied by the selected feedback mode.
+fresh pulse-derived position feedback.
 
-## Motor position modes
+## Motor position contract
 
-Configure the position mode with `idf.py menuconfig` under **Motor node
-hardware**. The current default is `PULSE_ONLY`, intended only to operate the
-prototype before limit switches are installed.
+The firmware uses `PULSE_ONLY` exclusively. Place the mechanism at the
+fully-closed position before every boot; firmware sets that position to zero
+and reports position from the commanded FastAccelStepper pulse count.
+Open, close, ventilation, and percentage commands use bounded absolute targets
+in `0..CONFIG_MOTOR_FULL_TRAVEL_STEPS`. This project deploys with
+`CONFIG_MOTOR_FULL_TRAVEL_STEPS=19500`.
 
-### PULSE_ONLY development mode
-
-Place the mechanism at the fully-closed position before every boot. Firmware
-sets the boot pulse position to zero and reports position from the commanded
-step count. Open, close, ventilation, and percentage commands use bounded
-absolute targets in `0..CONFIG_MOTOR_FULL_TRAVEL_STEPS`; they never start an
-unbounded continuous run. The `calibrate` action is rejected because there is
-no physical home sensor to stop it.
-
-This mode cannot detect an incorrect boot position, missed motor steps, manual
-movement, obstruction, or a mechanical end stop. A reset or loss of motor power
-invalidates the physical meaning of the calculated position. Use low speed,
-keep an operator at the emergency power disconnect, and do not ship this mode.
-
-### LIMIT_HOME product mode
-
-Select `LIMIT_HOME` after installing the switches and protection loop. This
-mode samples physical inputs, homes toward the closed limit after boot, and
-derives the 0–100% position from the homed FastAccelStepper pulse position.
-
-Default product-mode wiring:
-
-- GPIO0: TB6600 STEP/PUL output through the existing interface.
-- GPIO1: TB6600 DIR output through the existing interface.
-- GPIO4: normally-open fully-open limit switch to GND.
-- GPIO5: normally-open fully-closed limit switch to GND.
-- GPIO6: normally-closed protection loop to GND.
-- GPIO8: onboard RGB LED; never share it with a feedback input.
-- GPIO9: active-low provisioning-reset button; never share it.
-
-GPIO4/5 use internal pull-ups and are active-low. GPIO6 also uses a pull-up but
-is active-high, so an open protection wire is treated as a fault. The motor
-does not home or accept position-changing commands until the protection loop
-is closed and all three inputs have passed debounce.
-
-The configured prototype uses `CONFIG_MOTOR_FULL_TRAVEL_STEPS=36000`, calculated
-from 900 mm at 40 pulses/mm. Verify that pulse density and travel on the actual
-mechanism before relying on percentage control. The configured microstep value
-must also match the TB6600 DIP switches. Boot homing has a 30-second default timeout; a
-timeout, contradictory limits, or an open protection loop immediately stops
-pulses and keeps movement blocked.
+The contract cannot detect an incorrect boot position, missed motor steps,
+manual movement, obstruction, or a mechanical end stop. Power loss during a
+move does not provide automatic position recovery, so re-establish the closed
+position before the next boot. The configured microstep value must match the
+TB6600 DIP switches.
 
 ## Provisioning
 
@@ -102,8 +69,8 @@ JSON content type.
 {"commandId":"cmd-42","action":"set_position","ttlMs":5000,"position100ths":2500}
 ```
 
-Actions are `open`, `close`, `stop`, `ventilate`, `set_position`, and
-`calibrate`. `position100ths` is required only for `set_position` and ranges
+Actions are `open`, `close`, `stop`, `ventilate`, and `set_position`.
+`position100ths` is required only for `set_position` and ranges
 from 0 to 10000.
 
 ```json
@@ -126,8 +93,8 @@ FastAccelStepper RMT channels remain dedicated to motion.
 - blue: opening
 - purple: closing
 - cyan: ventilating
-- yellow blink: stopping or calibrating
-- red blink: fault or protection state
+- yellow blink: stopping
+- red blink: fault
 - blue breathe / cyan blink: provisioning / network connection
 - magenta fast blink: provisioning reset accepted
 

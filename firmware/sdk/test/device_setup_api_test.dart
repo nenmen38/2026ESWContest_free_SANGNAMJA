@@ -140,8 +140,8 @@ final _qr = ProvisioningQrPayload.parse(
 
 const _motorState = '''
 {"mainState":"idle","currentPosition100ths":2500,
- "targetPosition100ths":2500,"positionValid":true,"errors":0,
- "calibrationState":"complete","protectionState":0,"revision":3}
+  "targetPosition100ths":2500,"positionValid":true,"errors":0,
+  "revision":3}
 ''';
 
 final class _FakeProvisioningBackend implements ProvisioningBackend {

@@ -119,7 +119,7 @@ if (!result.isAccepted) {
 ```
 
 Positions must be finite values from 0 through 100. Firmware remains the final
-authority for calibration, limit, position, and protection safety checks.
+authority for pulse-derived position validity and the configured travel range.
 
 ## Add a device
 

@@ -56,8 +56,6 @@ MotorState parseMotorState(String payload) => _decode(payload, (json) {
     targetPositionPercent: target / 100,
     positionValid: positionValid,
     errorFlags: json.integer('errors'),
-    calibrationState: _calibrationState(json.string('calibrationState')),
-    protectionState: json.integer('protectionState'),
     revision: json.integer('revision'),
   );
 });
@@ -137,7 +135,7 @@ AirQualityLevel airQualityLevel(int? pm2_5) {
     final status = switch (result) {
       'accepted' => CommandStatus.accepted,
       'duplicate_command' => CommandStatus.duplicateCommand,
-      'safety_unavailable' => CommandStatus.safetyUnavailable,
+      'feedback_unavailable' => CommandStatus.feedbackUnavailable,
       'position_unknown' => CommandStatus.positionUnknown,
       'hardware_rejected' => CommandStatus.hardwareRejected,
       'invalid_command' => CommandStatus.invalidCommand,
@@ -211,16 +209,6 @@ MotorMainState _motorState(String value) => switch (value) {
   'closing' => MotorMainState.closing,
   'ventilating' => MotorMainState.ventilating,
   'stopping' => MotorMainState.stopping,
-  'calibrating' => MotorMainState.calibrating,
   'fault' => MotorMainState.fault,
-  'protected' => MotorMainState.protected,
   _ => MotorMainState.unknown,
-};
-
-MotorCalibrationState _calibrationState(String value) => switch (value) {
-  'required' => MotorCalibrationState.required,
-  'in_progress' => MotorCalibrationState.inProgress,
-  'complete' => MotorCalibrationState.complete,
-  'failed' => MotorCalibrationState.failed,
-  _ => MotorCalibrationState.unknown,
 };

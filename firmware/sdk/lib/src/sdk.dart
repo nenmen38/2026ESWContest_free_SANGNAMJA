@@ -41,9 +41,6 @@ abstract interface class MotorController {
 
   /// Moves to [percent], which must be between 0 and 100 inclusive.
   Future<CommandResult> setPosition({required double percent});
-
-  /// Starts the firmware calibration routine.
-  Future<CommandResult> calibrate();
 }
 
 /// High-level entry point for connecting, observing, controlling, and setting
