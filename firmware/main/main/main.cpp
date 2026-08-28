@@ -37,7 +37,6 @@ MotorServiceConfig makeServiceConfig()
     MotorServiceConfig config;
     config.min_steps = 0;
     config.max_steps = CONFIG_MOTOR_FULL_TRAVEL_STEPS;
-    config.ventilation_position100ths = CONFIG_MOTOR_VENTILATION_POSITION_100THS;
     config.feedback_stale_after_ms = CONFIG_MOTOR_FEEDBACK_STALE_MS;
     return config;
 }
@@ -98,9 +97,6 @@ void updateMotorLed(StatusLed& led, const device_common::MotorCanonicalState& st
         break;
     case device_common::MotorMainState::Closing:
         led.set(StatusLedLayer::Device, StatusLedSignal::PurpleSolid);
-        break;
-    case device_common::MotorMainState::Ventilating:
-        led.set(StatusLedLayer::Device, StatusLedSignal::CyanSolid);
         break;
     case device_common::MotorMainState::Stopping:
         led.set(StatusLedLayer::Device, StatusLedSignal::YellowBlink);

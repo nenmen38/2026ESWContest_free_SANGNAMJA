@@ -65,7 +65,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(fake.connectCalls, 1);
-    expect(find.text('스마트 환기창'), findsOneWidget);
+    expect(find.text('스마트 창문'), findsOneWidget);
     expect(find.text('motor-aabb'), findsOneWidget);
     await tester.tap(find.text('열기'));
     await tester.pumpAndSettle();

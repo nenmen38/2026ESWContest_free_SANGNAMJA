@@ -37,7 +37,6 @@ enum class MotorCommandAction : uint8_t {
     Open,
     Close,
     Stop,
-    Ventilate,
     SetPosition,
 };
 
@@ -117,7 +116,6 @@ enum class MotorMainState : uint8_t {
     Idle,
     Opening,
     Closing,
-    Ventilating,
     Stopping,
     Fault,
 };

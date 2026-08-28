@@ -151,9 +151,6 @@ enum MotorMainState {
   /// Motor is closing.
   closing,
 
-  /// Motor is moving to the configured ventilation position.
-  ventilating,
-
   /// A stop is in progress.
   stopping,
 

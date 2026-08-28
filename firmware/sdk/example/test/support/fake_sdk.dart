@@ -127,8 +127,6 @@ final class _FakeMotor implements MotorController {
       _send('setPosition:$percent');
   @override
   Future<CommandResult> stop() => _send('stop');
-  @override
-  Future<CommandResult> ventilate() => _send('ventilate');
 }
 
 final class _FakeSetup implements DeviceSetup {

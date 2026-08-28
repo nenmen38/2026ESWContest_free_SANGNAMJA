@@ -16,7 +16,6 @@ bool isKnownAction(MotorCommandAction action)
     case MotorCommandAction::Open:
     case MotorCommandAction::Close:
     case MotorCommandAction::Stop:
-    case MotorCommandAction::Ventilate:
     case MotorCommandAction::SetPosition:
         return true;
     }
@@ -62,8 +61,6 @@ const char* motorCommandActionName(MotorCommandAction action)
         return "close";
     case MotorCommandAction::Stop:
         return "stop";
-    case MotorCommandAction::Ventilate:
-        return "ventilate";
     case MotorCommandAction::SetPosition:
         return "set_position";
     }

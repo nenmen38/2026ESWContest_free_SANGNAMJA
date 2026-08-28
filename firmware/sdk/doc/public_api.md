@@ -83,7 +83,7 @@ import 'package:esw_device_sdk/esw_device_sdk.dart';
 
 | API | 설명 |
 | --- | --- |
-| `MotorMainState` | `unknown`, `idle`, `opening`, `closing`, `ventilating`, `stopping`, `fault` |
+| `MotorMainState` | `unknown`, `idle`, `opening`, `closing`, `stopping`, `fault` |
 | `MotorState` | 모터 동작 상태, 현재/목표 위치, 위치 신뢰 여부, 오류 플래그, revision |
 | `MotorState.hasError` | `errorFlags != 0`이면 `true` |
 
@@ -116,7 +116,6 @@ import 'package:esw_device_sdk/esw_device_sdk.dart';
 | `open()` | 완전 열림 요청 |
 | `close()` | 완전 닫힘 요청 |
 | `stop()` | 정지 요청 |
-| `ventilate()` | 펌웨어 설정 환기 위치로 이동 |
 | `setPosition({required double percent})` | 지정 위치로 이동 |
 
 모든 명령은 `Future<CommandResult>`를 반환한다. 오프라인 장치에는 I/O를

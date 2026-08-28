@@ -223,7 +223,7 @@ class _MotorPanelState extends State<_MotorPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _DeviceHeader(device: widget.device, title: '스마트 환기창'),
+        _DeviceHeader(device: widget.device, title: '스마트 창문'),
         Text(
           '열림 ${position.toStringAsFixed(0)}% · ${state?.mainState.name ?? '상태 확인 중'}',
         ),
@@ -250,7 +250,6 @@ class _MotorPanelState extends State<_MotorPanel> {
                     '열기': widget.controller.open,
                     '정지': widget.controller.stop,
                     '닫기': widget.controller.close,
-                    '환기': widget.controller.ventilate,
                   }.entries
                   .map(
                     (entry) => ActionChip(

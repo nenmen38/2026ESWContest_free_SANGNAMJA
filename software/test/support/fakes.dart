@@ -208,6 +208,4 @@ final class _FakeMotor implements MotorController {
       _accepted('set:$percent');
   @override
   Future<CommandResult> stop() => _accepted('stop');
-  @override
-  Future<CommandResult> ventilate() => _accepted('ventilate');
 }

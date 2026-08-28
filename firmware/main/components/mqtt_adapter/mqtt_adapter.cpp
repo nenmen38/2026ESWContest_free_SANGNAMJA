@@ -18,7 +18,6 @@ bool actionFromName(const char* name, device_common::MotorCommandAction* output)
     if (std::strcmp(name, "open") == 0) *output = device_common::MotorCommandAction::Open;
     else if (std::strcmp(name, "close") == 0) *output = device_common::MotorCommandAction::Close;
     else if (std::strcmp(name, "stop") == 0) *output = device_common::MotorCommandAction::Stop;
-    else if (std::strcmp(name, "ventilate") == 0) *output = device_common::MotorCommandAction::Ventilate;
     else if (std::strcmp(name, "set_position") == 0) *output = device_common::MotorCommandAction::SetPosition;
     else return false;
     return true;
@@ -211,7 +210,6 @@ const char* MotorMqttAdapter::stateName(device_common::MotorMainState state)
     case device_common::MotorMainState::Idle: return "idle";
     case device_common::MotorMainState::Opening: return "opening";
     case device_common::MotorMainState::Closing: return "closing";
-    case device_common::MotorMainState::Ventilating: return "ventilating";
     case device_common::MotorMainState::Stopping: return "stopping";
     case device_common::MotorMainState::Fault: return "fault";
     }

@@ -36,9 +36,6 @@ abstract interface class MotorController {
   /// Requests a controlled stop.
   Future<CommandResult> stop();
 
-  /// Moves to the firmware-configured ventilation position.
-  Future<CommandResult> ventilate();
-
   /// Moves to [percent], which must be between 0 and 100 inclusive.
   Future<CommandResult> setPosition({required double percent});
 }

@@ -207,7 +207,6 @@ MotorMainState _motorState(String value) => switch (value) {
   'idle' => MotorMainState.idle,
   'opening' => MotorMainState.opening,
   'closing' => MotorMainState.closing,
-  'ventilating' => MotorMainState.ventilating,
   'stopping' => MotorMainState.stopping,
   'fault' => MotorMainState.fault,
   _ => MotorMainState.unknown,

@@ -130,7 +130,6 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
       MotorMainState.idle => '대기',
       MotorMainState.opening => '창문 여는 중',
       MotorMainState.closing => '창문 닫는 중',
-      MotorMainState.ventilating => '환기 위치로 이동 중',
       MotorMainState.stopping => '정지 중',
       MotorMainState.fault => '모터 오류',
     };
@@ -626,7 +625,7 @@ class _HeroWindowCard extends StatelessWidget {
                   ),
                 ),
                 _DecisionBadge(
-                  label: isLocked ? '닫힘 유지' : '환기 가능',
+                  label: isLocked ? '닫힘 유지' : '열기 가능',
                   color: isLocked
                       ? const Color(0xFFFF8A00)
                       : const Color(0xFF3182F6),
@@ -956,30 +955,14 @@ class _EnvironmentPanel extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Column(
-            children: [
-              Expanded(
-                child: _InfoCard(
-                  icon: Icons.air_outlined,
-                  title: '환기',
-                  value: rainLock ? '대기' : '가능',
-                  detail: rainLock ? '닫힘 권장' : '열기 가능',
-                  color: const Color(0xFF00A661),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Expanded(
-                child: _InfoCard(
-                  icon: Icons.grain,
-                  title: 'PM2.5 실내/외',
-                  value:
-                      '${environment.indoorFineDust.pm25?.round() ?? '—'} / ${environment.outdoorFineDust.pm25?.round() ?? '—'}',
-                  detail:
-                      '${environment.indoorFineDust.levelLabel} / ${environment.outdoorFineDust.levelLabel}',
-                  color: const Color(0xFF6B7684),
-                ),
-              ),
-            ],
+          child: _InfoCard(
+            icon: Icons.grain,
+            title: 'PM2.5 실내/외',
+            value:
+                '${environment.indoorFineDust.pm25?.round() ?? '—'} / ${environment.outdoorFineDust.pm25?.round() ?? '—'}',
+            detail:
+                '${environment.indoorFineDust.levelLabel} / ${environment.outdoorFineDust.levelLabel}',
+            color: const Color(0xFF6B7684),
           ),
         ),
       ],

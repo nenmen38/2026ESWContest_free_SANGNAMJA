@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Removed the unused ventilation motor action and state from the public API and
+  firmware contract.
 - Vendored `esp_provisioning_ble 1.1.0` and modernized its Android bridge for
   API 37, Java 17, and minimum API 23 compatibility.
 - Replaced separate connection and device feeds with seeded atomic SDK state.

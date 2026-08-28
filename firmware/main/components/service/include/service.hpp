@@ -29,7 +29,6 @@ struct MotorFeedback {
 struct MotorServiceConfig {
     int32_t min_steps = 0;
     int32_t max_steps = 1600;
-    uint32_t ventilation_position100ths = 2500;
     uint32_t feedback_stale_after_ms = 2000;
 };
 

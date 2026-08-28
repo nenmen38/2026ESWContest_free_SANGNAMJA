@@ -47,11 +47,6 @@ config MOTOR_FULL_TRAVEL_STEPS
         Replace the default with the measured pulse count after installing the
         actuator. This is not the motor's steps-per-revolution value.
 
-config MOTOR_VENTILATION_POSITION_100THS
-    int "Ventilation position in 0.01 percent units"
-    range 0 10000
-    default 2500
-
 config MOTOR_FEEDBACK_STALE_MS
     int "Position feedback timeout in milliseconds"
     range 100 10000

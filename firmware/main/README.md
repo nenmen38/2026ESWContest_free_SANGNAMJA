@@ -10,7 +10,7 @@ fresh pulse-derived position feedback.
 The firmware uses `PULSE_ONLY` exclusively. Place the mechanism at the
 fully-closed position before every boot; firmware sets that position to zero
 and reports position from the commanded FastAccelStepper pulse count.
-Open, close, ventilation, and percentage commands use bounded absolute targets
+Open, close, and percentage commands use bounded absolute targets
 in `0..CONFIG_MOTOR_FULL_TRAVEL_STEPS`. This project deploys with
 `CONFIG_MOTOR_FULL_TRAVEL_STEPS=19500`.
 
@@ -69,7 +69,7 @@ JSON content type.
 {"commandId":"cmd-42","action":"set_position","ttlMs":5000,"position100ths":2500}
 ```
 
-Actions are `open`, `close`, `stop`, `ventilate`, and `set_position`.
+Actions are `open`, `close`, `stop`, and `set_position`.
 `position100ths` is required only for `set_position` and ranges
 from 0 to 10000.
 
@@ -92,7 +92,6 @@ FastAccelStepper RMT channels remain dedicated to motion.
 
 - blue: opening
 - purple: closing
-- cyan: ventilating
 - yellow blink: stopping
 - red blink: fault
 - blue breathe / cyan blink: provisioning / network connection

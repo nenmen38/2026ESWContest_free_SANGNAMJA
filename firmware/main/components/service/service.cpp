@@ -40,8 +40,7 @@ bool MotorService::begin()
         return true;
     }
     if (config_.min_steps != 0 || config_.max_steps <= config_.min_steps ||
-        config_.feedback_stale_after_ms == 0 ||
-        !device_common::isPosition100thsValid(config_.ventilation_position100ths)) {
+        config_.feedback_stale_after_ms == 0) {
         ESP_LOGE(kTag, "invalid motor service position configuration");
         return false;
     }
@@ -174,22 +173,6 @@ MotorCommandResult MotorService::processCommand(const device_common::MotorComman
             return result;
         }
 
-    case device_common::MotorCommandAction::Ventilate:
-        if (!positionFeedbackAvailable(now_ms)) {
-            return rejectFeedbackUnavailable();
-        }
-        state_.revision++;
-        {
-            const auto result = moveToPosition(config_.ventilation_position100ths);
-            if (result == MotorCommandResult::HardwareRejected) {
-                return reject(result, device_common::kMotorErrorHardwareRejected,
-                              device_common::MotorMainState::Fault);
-            } else if (result == MotorCommandResult::Accepted) {
-                state_.main_state = device_common::MotorMainState::Ventilating;
-            }
-            return result;
-        }
-
     case device_common::MotorCommandAction::Open:
         if (!positionFeedbackAvailable(now_ms)) {
             return rejectFeedbackUnavailable();
@@ -238,7 +221,6 @@ void MotorService::processFeedback(const MotorFeedback& feedback)
     if (reached_target &&
         (state_.main_state == device_common::MotorMainState::Opening ||
          state_.main_state == device_common::MotorMainState::Closing ||
-         state_.main_state == device_common::MotorMainState::Ventilating ||
          state_.main_state == device_common::MotorMainState::Unknown)) {
         state_.main_state = device_common::MotorMainState::Idle;
     }
