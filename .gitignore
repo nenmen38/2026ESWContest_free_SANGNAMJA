@@ -54,6 +54,12 @@ app.*.map.json
 # Widget Preview related
 **/.widget_preview/
 
+# Flutter platform-generated and machine-local files
+**/android/local.properties
+**/GeneratedPluginRegistrant.*
+**/generated_plugin_registrant.*
+**/generated_plugins.cmake
+
 # AI Agent memory / notes
 AGENTS.md
 CLAUDE.md
