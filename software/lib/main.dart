@@ -145,6 +145,25 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
     setState(() => _autoMode = !_autoMode);
   }
 
+  Future<void> _changePositionManually(
+    MotorDeviceSnapshot? motor,
+    double? currentPercent,
+  ) async {
+    final percent = await _askPositionPercent(currentPercent);
+    if (percent == null) return;
+    await _runCommand(
+      motor,
+      (controller) => controller.setPosition(percent: percent),
+    );
+  }
+
+  Future<double?> _askPositionPercent(double? currentPercent) =>
+      showDialog<double>(
+        context: context,
+        builder: (context) =>
+            _PositionInputDialog(initialPercent: currentPercent),
+      );
+
   void _openSettings(
     EnvironmentSnapshot environment,
     bool rainLock,
@@ -235,6 +254,12 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
                             isLocked: isLocked,
                             rainLock: rainLock,
                             motorOnline: motor?.isOnline == true,
+                            onPositionTap: controlsEnabled
+                                ? () => _changePositionManually(
+                                    motor,
+                                    openPercent,
+                                  )
+                                : null,
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -272,6 +297,75 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
           },
         ),
       ),
+    );
+  }
+}
+
+class _PositionInputDialog extends StatefulWidget {
+  const _PositionInputDialog({required this.initialPercent});
+
+  final double? initialPercent;
+
+  @override
+  State<_PositionInputDialog> createState() => _PositionInputDialogState();
+}
+
+class _PositionInputDialogState extends State<_PositionInputDialog> {
+  late final TextEditingController _controller;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    final initialPercent = widget.initialPercent;
+    _controller = TextEditingController(
+      text: initialPercent == null ? '' : initialPercent.round().toString(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final rawValue = _controller.text.trim().replaceAll('%', '');
+    final value = double.tryParse(rawValue);
+    if (value == null || value < 0 || value > 100) {
+      setState(() => _errorText = '0부터 100 사이 숫자를 입력해 주세요.');
+      return;
+    }
+    Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('개도율 직접 입력'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(
+          labelText: '개도율',
+          suffixText: '%',
+          errorText: _errorText,
+        ),
+        onChanged: (_) {
+          if (_errorText != null) {
+            setState(() => _errorText = null);
+          }
+        },
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('취소'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('적용')),
+      ],
     );
   }
 }
@@ -421,12 +515,14 @@ class _HeroWindowCard extends StatelessWidget {
     required this.isLocked,
     required this.rainLock,
     required this.motorOnline,
+    required this.onPositionTap,
   });
 
   final double? openPercent;
   final bool isLocked;
   final bool rainLock;
   final bool motorOnline;
+  final VoidCallback? onPositionTap;
 
   @override
   Widget build(BuildContext context) {
@@ -452,15 +548,84 @@ class _HeroWindowCard extends StatelessWidget {
                             ),
                       ),
                       const SizedBox(height: 6),
-                      Text(
-                        openPercent == null ? '—' : '${openPercent!.round()}%',
-                        style: Theme.of(context).textTheme.displayMedium
-                            ?.copyWith(
-                              color: const Color(0xFF191F28),
-                              fontWeight: FontWeight.w900,
-                              height: 0.95,
-                              letterSpacing: 0,
+                      InkWell(
+                        onTap: onPositionTap,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(11, 6, 11, 7),
+                          decoration: BoxDecoration(
+                            color: onPositionTap == null
+                                ? const Color(0xFFF2F4F6)
+                                : const Color(0xFFE8F2FF),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: onPositionTap == null
+                                  ? const Color(0xFFE5E8EB)
+                                  : const Color(0xFFB9D8FF),
                             ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                openPercent == null
+                                    ? '—'
+                                    : '${openPercent!.round()}%',
+                                style: Theme.of(context).textTheme.headlineLarge
+                                    ?.copyWith(
+                                      color: const Color(0xFF191F28),
+                                      fontSize: 34,
+                                      fontWeight: FontWeight.w900,
+                                      height: 0.95,
+                                      letterSpacing: 0,
+                                    ),
+                              ),
+                              const SizedBox(width: 10),
+                              if (onPositionTap != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.edit_outlined,
+                                        size: 14,
+                                        color: const Color(0xFF3182F6),
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        '직접 입력',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(
+                                              color: const Color(0xFF3182F6),
+                                              fontWeight: FontWeight.w900,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              else
+                                Text(
+                                  '연결 필요',
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        color: const Color(0xFF8B95A1),
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),

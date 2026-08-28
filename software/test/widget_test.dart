@@ -73,6 +73,24 @@ void main() {
     expect(sdk.commands, ['close', 'stop']);
   });
 
+  testWidgets('개도율 숫자를 직접 입력하면 위치 명령을 보내고 수동으로 전환한다', (tester) async {
+    final sdk = readySdk();
+    await tester.pumpWidget(
+      testApp(
+        sdk: sdk,
+        weather: OutdoorWeatherStatus(reading: outdoorReading()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('25%'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '40');
+    await tester.tap(find.text('적용'));
+    await tester.pumpAndSettle();
+    expect(sdk.commands, ['set:40.0']);
+    expect(find.text('수동'), findsOneWidget);
+  });
+
   testWidgets('비가 오면 열기만 제한하고 자동 닫기 명령은 보내지 않는다', (tester) async {
     final sdk = readySdk();
     await tester.pumpWidget(
