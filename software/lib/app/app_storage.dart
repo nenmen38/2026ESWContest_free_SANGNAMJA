@@ -13,6 +13,8 @@ abstract interface class AppStorage {
   Future<void> clearCredentials();
   Future<InstallationLocation?> readInstallationLocation();
   Future<void> writeInstallationLocation(InstallationLocation location);
+  Future<HouseProfile> readHouseProfile();
+  Future<void> writeHouseProfile(HouseProfile profile);
   Future<SelectedDeviceIds> readSelectedDeviceIds();
   Future<void> writeSelectedDeviceIds(SelectedDeviceIds selection);
   Future<IndoorEnvironmentOverride?> readIndoorEnvironmentOverride();
@@ -32,6 +34,7 @@ final class SecureAppStorage implements AppStorage {
   static const _onboardingKey = 'esw.onboarding.seen';
   static const _credentialsKey = 'esw.connection.credentials';
   static const _locationKey = 'esw.installation.location';
+  static const _houseProfileKey = 'esw.home.house_profile';
   static const _selectedDevicesKey = 'esw.home.selected_devices';
   static const _indoorEnvironmentOverrideKey =
       'esw.indoor_environment.override';
@@ -101,6 +104,23 @@ final class SecureAppStorage implements AppStorage {
       value: jsonEncode(location.toJson()),
     );
   }
+
+  @override
+  Future<HouseProfile> readHouseProfile() async {
+    final raw = await _storage.read(key: _houseProfileKey);
+    if (raw == null) return const HouseProfile();
+    try {
+      return HouseProfile.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } on Object {
+      return const HouseProfile();
+    }
+  }
+
+  @override
+  Future<void> writeHouseProfile(HouseProfile profile) => _storage.write(
+    key: _houseProfileKey,
+    value: jsonEncode(profile.toJson()),
+  );
 
   @override
   Future<SelectedDeviceIds> readSelectedDeviceIds() async {

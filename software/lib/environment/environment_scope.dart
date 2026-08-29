@@ -23,6 +23,10 @@ final installationLocationProvider = FutureProvider<InstallationLocation?>(
   (ref) => ref.watch(appStorageProvider).readInstallationLocation(),
 );
 
+final houseProfileProvider = FutureProvider<HouseProfile>(
+  (ref) => ref.watch(appStorageProvider).readHouseProfile(),
+);
+
 final selectedDeviceIdsProvider = FutureProvider<SelectedDeviceIds>(
   (ref) => ref.watch(appStorageProvider).readSelectedDeviceIds(),
 );

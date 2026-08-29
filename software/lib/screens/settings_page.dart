@@ -32,6 +32,7 @@ class SettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final location = ref.watch(installationLocationProvider).value;
+    final houseProfile = ref.watch(houseProfileProvider).value ?? const HouseProfile();
     final sdk = ref.watch(sdkProvider);
     final sdkState = ref.watch(sdkStateProvider).value ?? sdk.currentState;
     final selected =
@@ -124,6 +125,40 @@ class SettingsPage extends ConsumerWidget {
                         );
                         ref.invalidate(installationLocationProvider);
                         ref.invalidate(rawOutdoorWeatherProvider);
+                      },
+                    ),
+                    const Divider(height: 1),
+                    _SettingsTile(
+                      icon: Icons.straighten,
+                      title: '평수',
+                      value: '${houseProfile.floorAreaPyeong.toStringAsFixed(0)} 평',
+                      onTap: () async {
+                        final updated = await showDialog<HouseProfile>(
+                          context: context,
+                          builder: (_) => _HouseProfileDialog(initial: houseProfile),
+                        );
+                        if (updated == null) return;
+                        await ref
+                            .read(appStorageProvider)
+                            .writeHouseProfile(updated);
+                        ref.invalidate(houseProfileProvider);
+                      },
+                    ),
+                    const Divider(height: 1),
+                    _SettingsTile(
+                      icon: Icons.explore_outlined,
+                      title: '창문 방향',
+                      value: houseProfile.windowOrientation.label,
+                      onTap: () async {
+                        final updated = await showDialog<HouseProfile>(
+                          context: context,
+                          builder: (_) => _HouseProfileDialog(initial: houseProfile),
+                        );
+                        if (updated == null) return;
+                        await ref
+                            .read(appStorageProvider)
+                            .writeHouseProfile(updated);
+                        ref.invalidate(houseProfileProvider);
                       },
                     ),
                   ],
@@ -308,6 +343,99 @@ class _SettingsSection extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
           ),
           child: Column(children: children),
+        ),
+      ],
+    );
+  }
+}
+
+class _HouseProfileDialog extends StatefulWidget {
+  const _HouseProfileDialog({required this.initial});
+
+  final HouseProfile initial;
+
+  @override
+  State<_HouseProfileDialog> createState() => _HouseProfileDialogState();
+}
+
+class _HouseProfileDialogState extends State<_HouseProfileDialog> {
+  late final TextEditingController _areaController;
+  late WindowOrientation _orientation;
+
+  @override
+  void initState() {
+    super.initState();
+    _areaController = TextEditingController(
+      text: widget.initial.floorAreaPyeong.toStringAsFixed(0),
+    );
+    _orientation = widget.initial.windowOrientation;
+  }
+
+  @override
+  void dispose() {
+    _areaController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('집 정보 설정'),
+      content: SizedBox(
+        width: 340,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _areaController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: '평수',
+                  suffixText: '평',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<WindowOrientation>(
+                initialValue: _orientation,
+                decoration: const InputDecoration(
+                  labelText: '창문 방향',
+                  border: OutlineInputBorder(),
+                ),
+                items: WindowOrientation.values
+                    .map(
+                      (entry) => DropdownMenuItem(
+                        value: entry,
+                        child: Text(entry.label),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _orientation = value);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('취소'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final floorArea = double.tryParse(_areaController.text.trim());
+            final profile = widget.initial.copyWith(
+              floorAreaPyeong: floorArea ?? widget.initial.floorAreaPyeong,
+              windowOrientation: _orientation,
+            );
+            Navigator.of(context).pop(profile);
+          },
+          child: const Text('저장'),
         ),
       ],
     );

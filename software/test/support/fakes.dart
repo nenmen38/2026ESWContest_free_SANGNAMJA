@@ -45,6 +45,12 @@ final class MemoryAppStorage implements AppStorage {
       location = value;
 
   @override
+  Future<HouseProfile> readHouseProfile() async => const HouseProfile();
+
+  @override
+  Future<void> writeHouseProfile(HouseProfile value) async {}
+
+  @override
   Future<SelectedDeviceIds> readSelectedDeviceIds() async => selectedDevices;
 
   @override
