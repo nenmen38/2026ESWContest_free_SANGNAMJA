@@ -21,6 +21,8 @@ class _DeveloperToolsPageState extends ConsumerState<DeveloperToolsPage> {
   final _outdoorHumidity = TextEditingController();
   final _outdoorPm25 = TextEditingController();
   final _outdoorPrecipitation = TextEditingController();
+  final _outdoorWindSpeed = TextEditingController();
+  final _outdoorWindDirection = TextEditingController();
   bool _initialized = false;
   bool _savingIndoor = false;
   bool _savingOutdoor = false;
@@ -35,6 +37,8 @@ class _DeveloperToolsPageState extends ConsumerState<DeveloperToolsPage> {
     _outdoorHumidity.dispose();
     _outdoorPm25.dispose();
     _outdoorPrecipitation.dispose();
+    _outdoorWindSpeed.dispose();
+    _outdoorWindDirection.dispose();
     super.dispose();
   }
 
@@ -49,6 +53,8 @@ class _DeveloperToolsPageState extends ConsumerState<DeveloperToolsPage> {
     _outdoorHumidity.text = _text(outdoor?.humidityPercent);
     _outdoorPm25.text = _text(outdoor?.pm2_5);
     _outdoorPrecipitation.text = _text(outdoor?.precipitationMm);
+    _outdoorWindSpeed.text = _text(outdoor?.windSpeed10m);
+    _outdoorWindDirection.text = _text(outdoor?.windDirection10m);
     _initialized = true;
   }
 
@@ -89,6 +95,8 @@ class _DeveloperToolsPageState extends ConsumerState<DeveloperToolsPage> {
             humidityPercent: _value(_outdoorHumidity),
             pm2_5: _value(_outdoorPm25),
             precipitationMm: _value(_outdoorPrecipitation),
+            windSpeed10m: _value(_outdoorWindSpeed),
+            windDirection10m: _value(_outdoorWindDirection),
           );
       _showMessage('실외 환경 테스트값을 적용했습니다.');
     } on Object catch (error) {
@@ -121,6 +129,8 @@ class _DeveloperToolsPageState extends ConsumerState<DeveloperToolsPage> {
       _outdoorHumidity.clear();
       _outdoorPm25.clear();
       _outdoorPrecipitation.clear();
+      _outdoorWindSpeed.clear();
+      _outdoorWindDirection.clear();
       _showMessage('실외 환경을 실데이터로 복원했습니다.');
     } on Object catch (error) {
       _showMessage('실외 환경 테스트값을 해제하지 못했습니다: $error');
@@ -143,6 +153,8 @@ class _DeveloperToolsPageState extends ConsumerState<DeveloperToolsPage> {
       _outdoorHumidity.clear();
       _outdoorPm25.clear();
       _outdoorPrecipitation.clear();
+      _outdoorWindSpeed.clear();
+      _outdoorWindDirection.clear();
       _showMessage('모든 환경 데이터를 실데이터로 복원했습니다.');
     } on Object catch (error) {
       _showMessage('환경 테스트값을 해제하지 못했습니다: $error');
@@ -297,6 +309,22 @@ class _DeveloperToolsPageState extends ConsumerState<DeveloperToolsPage> {
                       unit: 'mm',
                       minimum: 0,
                       maximum: 1000,
+                    ),
+                    _NumberField(
+                      fieldKey: const ValueKey('outdoor.windSpeed10m'),
+                      controller: _outdoorWindSpeed,
+                      label: '풍속',
+                      unit: 'km/h',
+                      minimum: 0,
+                      maximum: 500,
+                    ),
+                    _NumberField(
+                      fieldKey: const ValueKey('outdoor.windDirection10m'),
+                      controller: _outdoorWindDirection,
+                      label: '풍향',
+                      unit: '°',
+                      minimum: 0,
+                      maximum: 360,
                     ),
                   ],
                   busy: _savingOutdoor || _clearingAll,

@@ -73,6 +73,91 @@ void main() {
     expect(sdk.commands, ['close', 'stop']);
   });
 
+  testWidgets('자동 모드에서는 추천값을 표시하고 실행 버튼을 눌러야 추천 개도율이 적용된다', (tester) async {
+    final sdk = readySdk();
+    await tester.pumpWidget(
+      testApp(
+        sdk: sdk,
+        weather: OutdoorWeatherStatus(reading: outdoorReading()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('수동'), findsOneWidget);
+    await tester.tap(find.text('수동'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('자동'), findsOneWidget);
+    expect(find.text('추천'), findsOneWidget);
+    expect(find.text('실행'), findsOneWidget);
+    expect(
+      sdk.commands.where((command) => command.startsWith('set:')).isEmpty,
+      isTrue,
+    );
+
+    final recommendedText = tester
+        .widget<Text>(find.byKey(const ValueKey('auto_recommended_percent')))
+        .data;
+    final expectedRecommendation = recommendedText!.replaceAll('%', '').trim();
+
+    await tester.tap(find.byKey(const ValueKey('execute_auto_recommendation')));
+    await tester.pumpAndSettle();
+
+    expect(
+      sdk.commands.where((command) => command.startsWith('set:')).last,
+      'set:${double.parse(expectedRecommendation).toStringAsFixed(1)}',
+    );
+    expect(find.text('자동'), findsOneWidget);
+
+    await tester.tap(find.text('자동'));
+    await tester.pumpAndSettle();
+    expect(
+      sdk.commands.where((command) => command.startsWith('set:')).last,
+      'set:${double.parse(expectedRecommendation).toStringAsFixed(1)}',
+    );
+    expect(find.text('수동'), findsOneWidget);
+  });
+
+  testWidgets('저장된 강풍 override는 자동 추천을 0%로 만들고 자동 실행하지 않는다', (tester) async {
+    final sdk = readySdk();
+    final storage = MemoryAppStorage(
+      onboardingSeen: true,
+      outdoorEnvironmentOverride: OutdoorEnvironmentOverride(
+        windSpeed10m: 10,
+        windDirection10m: 180,
+        updatedAt: DateTime.now(),
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appStorageProvider.overrideWithValue(storage),
+          sdkProvider.overrideWithValue(sdk),
+          rawOutdoorWeatherProvider.overrideWith(
+            (_) =>
+                Stream.value(OutdoorWeatherStatus(reading: outdoorReading())),
+          ),
+        ],
+        child: const SmartWindowApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('수동'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('auto_recommended_percent')))
+          .data,
+      '0%',
+    );
+    expect(
+      sdk.commands.where((command) => command.startsWith('set:')),
+      isEmpty,
+    );
+  });
+
   testWidgets('개도율 숫자를 직접 입력하면 위치 명령을 보내고 수동으로 전환한다', (tester) async {
     final sdk = readySdk();
     await tester.pumpWidget(
@@ -178,7 +263,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-
     expect(find.text('33.3°C'), findsOneWidget);
     expect(find.text('습도 77%'), findsOneWidget);
     expect(find.text('88 / 18'), findsOneWidget);
@@ -245,6 +329,38 @@ void main() {
       expect(find.text('88 / 18'), findsOneWidget);
     });
   }
+
+  testWidgets('설정에서 집 주소는 숨기고 날씨 조회 위치와 평수/창문 방향만 표시한다', (tester) async {
+    final storage = MemoryAppStorage(
+      onboardingSeen: true,
+      location: const InstallationLocation(
+        latitude: 37.5665,
+        longitude: 126.978,
+      ),
+    );
+    await tester.pumpWidget(
+      testApp(
+        storage: storage,
+        sdk: readySdk(),
+        weather: OutdoorWeatherStatus(reading: outdoorReading()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pumpAndSettle();
+    expect(find.text('집 주소'), findsNothing);
+    expect(find.text('홈 모터'), findsOneWidget);
+    expect(find.text('날씨 조회 위치'), findsOneWidget);
+    expect(find.text('평수'), findsOneWidget);
+    expect(find.text('창문 방향'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Open-Meteo · CAMS'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('Open-Meteo · CAMS'), findsOneWidget);
+  });
 
   testWidgets('설정에서 장치와 설치 위치 관리 경로를 표시한다', (tester) async {
     final storage = MemoryAppStorage(

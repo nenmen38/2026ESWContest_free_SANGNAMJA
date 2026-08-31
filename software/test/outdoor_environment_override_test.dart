@@ -18,6 +18,8 @@ void main() {
     humidityPercent: 82,
     pm2_5: 55,
     precipitationMm: 2.4,
+    windSpeed10m: 12.5,
+    windDirection10m: 275,
     updatedAt: changedAt,
   );
 
@@ -38,7 +40,23 @@ void main() {
     expect(restored.humidityPercent, 82);
     expect(restored.pm2_5, 55);
     expect(restored.precipitationMm, 2.4);
+    expect(restored.windSpeed10m, 12.5);
+    expect(restored.windDirection10m, 275);
     expect(restored.updatedAt, changedAt);
+  });
+
+  test('기존 JSON은 풍속·풍향이 없는 상태로 호환 복원한다', () {
+    final restored = OutdoorEnvironmentOverride.fromJson({
+      'temperatureC': 31.5,
+      'humidityPercent': 82,
+      'pm2_5': 55,
+      'precipitationMm': 2.4,
+      'updatedAt': changedAt.toIso8601String(),
+    });
+
+    expect(restored.isComplete, isTrue);
+    expect(restored.windSpeed10m, isNull);
+    expect(restored.windDirection10m, isNull);
   });
 
   test('override 입력값의 도메인 범위를 검증한다', () {
@@ -47,6 +65,8 @@ void main() {
       humidityPercent: 100,
       pm2_5: 10000,
       precipitationMm: 1000,
+      windSpeed10m: 500,
+      windDirection10m: 360,
       updatedAt: changedAt,
     ).validate();
 
@@ -55,6 +75,8 @@ void main() {
       OutdoorEnvironmentOverride(humidityPercent: -0.1, updatedAt: changedAt),
       OutdoorEnvironmentOverride(pm2_5: -1, updatedAt: changedAt),
       OutdoorEnvironmentOverride(precipitationMm: 1000.1, updatedAt: changedAt),
+      OutdoorEnvironmentOverride(windSpeed10m: -0.1, updatedAt: changedAt),
+      OutdoorEnvironmentOverride(windDirection10m: 360.1, updatedAt: changedAt),
       OutdoorEnvironmentOverride(
         temperatureC: double.nan,
         updatedAt: changedAt,
@@ -68,6 +90,8 @@ void main() {
     final sourceReading = _reading(
       temperatureC: 20,
       precipitationMm: 0,
+      windSpeed10m: 7.5,
+      windDirection10m: 135,
       fetchedAt: changedAt.subtract(const Duration(minutes: 5)),
     );
     final result = applyOutdoorEnvironmentOverride(
@@ -83,7 +107,25 @@ void main() {
     expect(result.reading?.humidityPercent, sourceReading.humidityPercent);
     expect(result.reading?.pm2_5, sourceReading.pm2_5);
     expect(result.reading?.precipitationMm, 1.5);
+    expect(result.reading?.windSpeed10m, 7.5);
+    expect(result.reading?.windDirection10m, 135);
     expect(result.reading?.fetchedAt, changedAt);
+  });
+
+  test('지정한 풍속·풍향만 실데이터 위에 덮어쓴다', () {
+    final result = applyOutdoorEnvironmentOverride(
+      OutdoorWeatherStatus(
+        reading: _reading(windSpeed10m: 7.5, windDirection10m: 135),
+      ),
+      OutdoorEnvironmentOverride(
+        windSpeed10m: 12.5,
+        windDirection10m: 275,
+        updatedAt: changedAt,
+      ),
+    );
+
+    expect(result.reading?.windSpeed10m, 12.5);
+    expect(result.reading?.windDirection10m, 275);
   });
 
   test('실데이터가 없으면 부분값은 대기하고 완전값은 독립 동작한다', () {
@@ -98,6 +140,8 @@ void main() {
     final result = applyOutdoorEnvironmentOverride(source, completeOverride());
     expect(result.reading?.temperatureC, 31.5);
     expect(result.reading?.isRaining, isTrue);
+    expect(result.reading?.windSpeed10m, 12.5);
+    expect(result.reading?.windDirection10m, 275);
     expect(result.reading?.observedAt, changedAt);
     expect(result.isLoading, isFalse);
     expect(result.error, same(error));
@@ -197,12 +241,16 @@ OutdoorReading _reading({
   double humidityPercent = 60,
   double pm2_5 = 15,
   double precipitationMm = 0,
+  double? windSpeed10m,
+  double? windDirection10m,
   DateTime? fetchedAt,
 }) => OutdoorReading(
   temperatureC: temperatureC,
   humidityPercent: humidityPercent,
   pm2_5: pm2_5,
   precipitationMm: precipitationMm,
+  windSpeed10m: windSpeed10m,
+  windDirection10m: windDirection10m,
   observedAt: DateTime(2026, 8, 29, 12),
   fetchedAt: fetchedAt ?? DateTime(2026, 8, 29, 12),
 );

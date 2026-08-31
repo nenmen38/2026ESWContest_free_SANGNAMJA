@@ -21,6 +21,8 @@ void main() {
       ),
       outdoorEnvironmentOverride: OutdoorEnvironmentOverride(
         precipitationMm: 1.2,
+        windSpeed10m: 18.5,
+        windDirection10m: 245,
         updatedAt: DateTime(2026, 8, 31),
       ),
     );
@@ -44,6 +46,24 @@ void main() {
           .controller
           ?.text,
       '1.2',
+    );
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.byKey(const ValueKey('outdoor.windSpeed10m')),
+          )
+          .controller
+          ?.text,
+      '18.5',
+    );
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.byKey(const ValueKey('outdoor.windDirection10m')),
+          )
+          .controller
+          ?.text,
+      '245.0',
     );
     expect(find.text('테스트값 사용'), findsNWidgets(2));
   });
@@ -104,6 +124,14 @@ void main() {
       find.byKey(const ValueKey('outdoor.precipitationMm')),
       '3.5',
     );
+    await tester.enterText(
+      find.byKey(const ValueKey('outdoor.windSpeed10m')),
+      '12.5',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('outdoor.windDirection10m')),
+      '275',
+    );
     tester.testTextInput.hide();
     await tester.pumpAndSettle();
     final pageScroll = find
@@ -125,6 +153,8 @@ void main() {
     expect(storage.outdoorEnvironmentOverride?.humidityPercent, 90);
     expect(storage.outdoorEnvironmentOverride?.pm2_5, 120);
     expect(storage.outdoorEnvironmentOverride?.precipitationMm, 3.5);
+    expect(storage.outdoorEnvironmentOverride?.windSpeed10m, 12.5);
+    expect(storage.outdoorEnvironmentOverride?.windDirection10m, 275);
 
     final clearAll = find.byKey(const ValueKey('environment.clearAll'));
     await tester.scrollUntilVisible(clearAll, 300, scrollable: pageScroll);
@@ -133,5 +163,41 @@ void main() {
     expect(storage.indoorEnvironmentOverride, isNull);
     expect(storage.outdoorEnvironmentOverride, isNull);
     expect(find.text('모든 환경 데이터를 실데이터로 복원했습니다.'), findsOneWidget);
+  });
+
+  testWidgets('풍속·풍향 입력 범위를 검증한다', (tester) async {
+    final storage = MemoryAppStorage();
+    await tester.pumpWidget(testApp(storage));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('outdoor.windSpeed10m')),
+      '500.1',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('outdoor.windDirection10m')),
+      '360.1',
+    );
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+    final pageScroll = find
+        .descendant(
+          of: find.byKey(const ValueKey('developer_tools.list')),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    final apply = find.byKey(const ValueKey('outdoor.apply'));
+    await tester.scrollUntilVisible(apply, 300, scrollable: pageScroll);
+    await tester.drag(
+      find.byKey(const ValueKey('developer_tools.list')),
+      const Offset(0, -160),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(apply);
+    await tester.pumpAndSettle();
+
+    expect(find.text('0.0부터 500.0 사이여야 합니다.'), findsOneWidget);
+    expect(find.text('0.0부터 360.0 사이여야 합니다.'), findsOneWidget);
+    expect(storage.outdoorEnvironmentOverride, isNull);
   });
 }

@@ -33,6 +33,93 @@ final class InstallationLocation {
       '${latitude.toStringAsFixed(5)}, ${longitude.toStringAsFixed(5)}';
 }
 
+enum WindowOrientation {
+  north,
+  northEast,
+  east,
+  southEast,
+  south,
+  southWest,
+  west,
+  northWest;
+
+  static WindowOrientation fromJson(dynamic value) => switch (value) {
+    'north' => WindowOrientation.north,
+    'northEast' || 'northeast' => WindowOrientation.northEast,
+    'east' => WindowOrientation.east,
+    'southEast' || 'southeast' => WindowOrientation.southEast,
+    'south' => WindowOrientation.south,
+    'southWest' || 'southwest' => WindowOrientation.southWest,
+    'west' => WindowOrientation.west,
+    'northWest' || 'northwest' => WindowOrientation.northWest,
+    _ => WindowOrientation.south,
+  };
+
+  String get label => switch (this) {
+    WindowOrientation.north => '북향',
+    WindowOrientation.northEast => '북동향',
+    WindowOrientation.east => '동향',
+    WindowOrientation.southEast => '남동향',
+    WindowOrientation.south => '남향',
+    WindowOrientation.southWest => '남서향',
+    WindowOrientation.west => '서향',
+    WindowOrientation.northWest => '북서향',
+  };
+
+  double get exposureFactor => switch (this) {
+    WindowOrientation.north => 0.85,
+    WindowOrientation.northEast => 0.9,
+    WindowOrientation.east => 1.0,
+    WindowOrientation.southEast => 1.1,
+    WindowOrientation.south => 1.2,
+    WindowOrientation.southWest => 1.1,
+    WindowOrientation.west => 1.0,
+    WindowOrientation.northWest => 0.9,
+  };
+}
+
+final class HouseProfile {
+  const HouseProfile({
+    this.floorAreaPyeong = 25,
+    this.windowOrientation = WindowOrientation.south,
+    this.recommendedSeconds = 180,
+    this.maxWindowAreaM2 = 1.0,
+  });
+
+  final double floorAreaPyeong;
+  final WindowOrientation windowOrientation;
+  final int recommendedSeconds;
+  final double maxWindowAreaM2;
+
+  double get floorAreaVolumeM3 => 3.3 * floorAreaPyeong * 2.3;
+
+  Map<String, dynamic> toJson() => {
+    'floorAreaPyeong': floorAreaPyeong,
+    'windowOrientation': windowOrientation.name,
+    'recommendedSeconds': recommendedSeconds,
+    'maxWindowAreaM2': maxWindowAreaM2,
+  };
+
+  factory HouseProfile.fromJson(Map<String, dynamic> json) => HouseProfile(
+    floorAreaPyeong: ((json['floorAreaPyeong'] as num?) ?? 25).toDouble(),
+    windowOrientation: WindowOrientation.fromJson(json['windowOrientation']),
+    recommendedSeconds: (json['recommendedSeconds'] as int?) ?? 180,
+    maxWindowAreaM2: ((json['maxWindowAreaM2'] as num?) ?? 1.0).toDouble(),
+  );
+
+  HouseProfile copyWith({
+    double? floorAreaPyeong,
+    WindowOrientation? windowOrientation,
+    int? recommendedSeconds,
+    double? maxWindowAreaM2,
+  }) => HouseProfile(
+    floorAreaPyeong: floorAreaPyeong ?? this.floorAreaPyeong,
+    windowOrientation: windowOrientation ?? this.windowOrientation,
+    recommendedSeconds: recommendedSeconds ?? this.recommendedSeconds,
+    maxWindowAreaM2: maxWindowAreaM2 ?? this.maxWindowAreaM2,
+  );
+}
+
 final class SelectedDeviceIds {
   const SelectedDeviceIds({this.motorId, this.sensorId});
 
@@ -60,6 +147,8 @@ final class OutdoorReading {
     required this.humidityPercent,
     required this.pm2_5,
     required this.precipitationMm,
+    this.windSpeed10m,
+    this.windDirection10m,
     required this.observedAt,
     required this.fetchedAt,
   });
@@ -68,10 +157,12 @@ final class OutdoorReading {
   final double humidityPercent;
   final double pm2_5;
   final double precipitationMm;
+  final double? windSpeed10m;
+  final double? windDirection10m;
   final DateTime observedAt;
   final DateTime fetchedAt;
 
-  bool get isRaining => precipitationMm > 0;
+  bool get isRaining => precipitationMm > 0.1;
 }
 
 enum IndoorEnvironmentField { temperatureC, humidityPercent, pm2_5 }
@@ -154,6 +245,8 @@ enum OutdoorEnvironmentField {
   humidityPercent,
   pm2_5,
   precipitationMm,
+  windSpeed10m,
+  windDirection10m,
 }
 
 final class OutdoorEnvironmentOverride {
@@ -163,19 +256,25 @@ final class OutdoorEnvironmentOverride {
     this.humidityPercent,
     this.pm2_5,
     this.precipitationMm,
+    this.windSpeed10m,
+    this.windDirection10m,
   });
 
   final double? temperatureC;
   final double? humidityPercent;
   final double? pm2_5;
   final double? precipitationMm;
+  final double? windSpeed10m;
+  final double? windDirection10m;
   final DateTime updatedAt;
 
   bool get isActive =>
       temperatureC != null ||
       humidityPercent != null ||
       pm2_5 != null ||
-      precipitationMm != null;
+      precipitationMm != null ||
+      windSpeed10m != null ||
+      windDirection10m != null;
 
   bool get isComplete =>
       temperatureC != null &&
@@ -188,6 +287,8 @@ final class OutdoorEnvironmentOverride {
     _validateRange(humidityPercent, 'humidityPercent', 0, 100);
     _validateRange(pm2_5, 'pm2_5', 0, 10000);
     _validateRange(precipitationMm, 'precipitationMm', 0, 1000);
+    _validateRange(windSpeed10m, 'windSpeed10m', 0, 500);
+    _validateRange(windDirection10m, 'windDirection10m', 0, 360);
   }
 
   Map<String, dynamic> toJson() => {
@@ -195,6 +296,8 @@ final class OutdoorEnvironmentOverride {
     'humidityPercent': humidityPercent,
     'pm2_5': pm2_5,
     'precipitationMm': precipitationMm,
+    'windSpeed10m': windSpeed10m,
+    'windDirection10m': windDirection10m,
     'updatedAt': updatedAt.toIso8601String(),
   };
 
@@ -217,6 +320,8 @@ final class OutdoorEnvironmentOverride {
       humidityPercent: optionalNumber('humidityPercent'),
       pm2_5: optionalNumber('pm2_5'),
       precipitationMm: optionalNumber('precipitationMm'),
+      windSpeed10m: optionalNumber('windSpeed10m'),
+      windDirection10m: optionalNumber('windDirection10m'),
       updatedAt: updatedAt,
     );
     value.validate();
@@ -276,6 +381,8 @@ OutdoorWeatherStatus applyOutdoorEnvironmentOverride(
           humidityPercent: override.humidityPercent!,
           pm2_5: override.pm2_5!,
           precipitationMm: override.precipitationMm!,
+          windSpeed10m: override.windSpeed10m,
+          windDirection10m: override.windDirection10m,
           observedAt: override.updatedAt,
           fetchedAt: override.updatedAt,
         )
@@ -286,6 +393,9 @@ OutdoorWeatherStatus applyOutdoorEnvironmentOverride(
           pm2_5: override.pm2_5 ?? sourceReading.pm2_5,
           precipitationMm:
               override.precipitationMm ?? sourceReading.precipitationMm,
+          windSpeed10m: override.windSpeed10m ?? sourceReading.windSpeed10m,
+          windDirection10m:
+              override.windDirection10m ?? sourceReading.windDirection10m,
           observedAt: sourceReading.observedAt,
           fetchedAt: override.updatedAt.isAfter(sourceReading.fetchedAt)
               ? override.updatedAt

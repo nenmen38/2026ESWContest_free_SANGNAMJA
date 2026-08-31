@@ -24,7 +24,8 @@ final class OpenMeteoWeatherClient implements WeatherClient {
     final forecastUri = Uri.https('api.open-meteo.com', '/v1/forecast', {
       'latitude': '${location.latitude}',
       'longitude': '${location.longitude}',
-      'current': 'temperature_2m,relative_humidity_2m,precipitation',
+      'current': 'temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m',
+      'wind_speed_unit': 'kmh',
       'timezone': 'auto',
     });
     final airUri = Uri.https(
@@ -75,10 +76,14 @@ final class OpenMeteoWeatherClient implements WeatherClient {
     if (observedAt == null) {
       throw const WeatherException('Open-Meteo 관측 시간이 올바르지 않습니다.');
     }
+    final windSpeed = weather['wind_speed_10m'];
+    final windDirection = weather['wind_direction_10m'];
     return OutdoorReading(
       temperatureC: number(weather, 'temperature_2m'),
       humidityPercent: number(weather, 'relative_humidity_2m'),
       precipitationMm: number(weather, 'precipitation'),
+      windSpeed10m: windSpeed is num ? windSpeed.toDouble() : null,
+      windDirection10m: windDirection is num ? windDirection.toDouble() : null,
       pm2_5: number(air, 'pm2_5'),
       observedAt: observedAt,
       fetchedAt: fetchedAt,

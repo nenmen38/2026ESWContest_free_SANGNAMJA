@@ -59,9 +59,14 @@ class SmartWindowHome extends ConsumerStatefulWidget {
 
 class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
     with WidgetsBindingObserver {
-  bool _autoMode = true;
+  bool _autoMode = false;
   bool _commandBusy = false;
   String? _latestActivity;
+  double? _manualPositionPercent;
+  double? _autoRecommendedPercent;
+
+  double _normalizedPercent(double? value) =>
+      (value ?? 0.0).clamp(0.0, 100.0).roundToDouble();
 
   @override
   void initState() {
@@ -84,15 +89,16 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
 
   Future<void> _runCommand(
     MotorDeviceSnapshot? motor,
-    Future<CommandResult> Function(MotorController controller) command,
-  ) async {
+    Future<CommandResult> Function(MotorController controller) command, {
+    bool keepAutoMode = false,
+  }) async {
     if (_commandBusy) return;
     if (motor == null || !motor.isOnline) {
       _showMessage('선택된 모터가 오프라인이거나 없습니다.');
       return;
     }
     setState(() {
-      _autoMode = false;
+      if (!keepAutoMode) _autoMode = false;
       _commandBusy = true;
     });
     try {
@@ -138,8 +144,118 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
     return '$time · $action${motor.isOnline ? '' : ' · 오프라인'}';
   }
 
-  void _toggleAutoMode() {
-    setState(() => _autoMode = !_autoMode);
+  double? _recommendedOpenPercent(
+    EnvironmentSnapshot environment,
+    HouseProfile profile,
+    OutdoorWeatherStatus weather,
+  ) {
+    final outdoor = weather.reading;
+    if (outdoor == null) return null;
+    if (environment.indoor.temperatureC == null ||
+        environment.outdoor.temperatureC == null ||
+        environment.indoor.humidityPercent == null ||
+        environment.outdoor.humidityPercent == null) {
+      return null;
+    }
+
+    final indoorTemp = environment.indoor.temperatureC!;
+    final outdoorTemp = environment.outdoor.temperatureC!;
+    final indoorHumidity = environment.indoor.humidityPercent!;
+    final outdoorHumidity = environment.outdoor.humidityPercent!;
+    final windSpeed = outdoor.windSpeed10m ?? 0.0;
+    final windDirection = outdoor.windDirection10m;
+
+    if (outdoor.precipitationMm > 0.1 ||
+        windSpeed >= 10.0 ||
+        (environment.outdoorFineDust.pm25 != null &&
+            environment.outdoorFineDust.pm25! >= 36)) {
+      return 0;
+    }
+
+    final floorAreaFactor = (profile.floorAreaPyeong / 25.0).clamp(0.8, 1.8);
+    final orientationFactor = (profile.windowOrientation.exposureFactor * 0.82)
+        .clamp(0.75, 1.1);
+    final tempDelta = (indoorTemp - outdoorTemp).clamp(0.0, 10.0).toDouble();
+    final humidityDelta = (indoorHumidity - outdoorHumidity).abs().clamp(0.0, 25.0);
+    final pmDelta = (environment.indoorFineDust.pm25 != null &&
+            environment.outdoorFineDust.pm25 != null)
+        ? (environment.indoorFineDust.pm25! - environment.outdoorFineDust.pm25!)
+            .clamp(0.0, 20.0)
+            .toDouble()
+        : 0.0;
+
+    final tempScore = tempDelta * 1.8;
+    final humidityScore = humidityDelta * 0.8;
+    final pmScore = pmDelta * 0.4;
+    final windPenalty = (windDirection != null && windSpeed >= 3.0)
+        ? (windSpeed * 1.4) * (1.2 / profile.windowOrientation.exposureFactor)
+        : 0.0;
+
+    var recommended = (10.0 + tempScore + humidityScore + pmScore - windPenalty) *
+        floorAreaFactor *
+        orientationFactor;
+    if (recommended < 8.0) recommended = 8.0;
+    if (recommended > 80.0) recommended = 80.0;
+
+    return recommended.roundToDouble().clamp(0.0, 100.0);
+  }
+
+  Future<void> _toggleAutoMode(
+    MotorDeviceSnapshot? motor,
+    EnvironmentSnapshot environment,
+    HouseProfile profile,
+    OutdoorWeatherStatus weather, {
+    double? currentPercent,
+  }) async {
+    if (_autoMode) {
+      final restore = _normalizedPercent(_manualPositionPercent ?? currentPercent);
+      setState(() {
+        _autoMode = false;
+        _manualPositionPercent = restore;
+        _autoRecommendedPercent = null;
+      });
+      await _runCommand(
+        motor,
+        (controller) => controller.setPosition(percent: restore),
+      );
+      setState(() => _latestActivity = '수동 복귀: ${restore.round()}%');
+      return;
+    }
+
+    final recommended = _recommendedOpenPercent(environment, profile, weather);
+    if (recommended == null) {
+      _showMessage('추천 계산에 필요한 실내·실외 데이터가 아직 부족합니다.');
+      return;
+    }
+
+    final normalizedRecommended = _normalizedPercent(recommended);
+    setState(() {
+      _manualPositionPercent = _normalizedPercent(
+        currentPercent ?? _manualPositionPercent ?? 25.0,
+      );
+      _autoRecommendedPercent = normalizedRecommended;
+      _autoMode = true;
+    });
+    setState(() => _latestActivity = '자동 추천 미리보기: ${normalizedRecommended.round()}%');
+  }
+
+  Future<void> _executeAutoRecommendation(
+    MotorDeviceSnapshot? motor,
+  ) async {
+    final recommended = _autoRecommendedPercent;
+    if (recommended == null) return;
+
+    final normalizedPercent = _normalizedPercent(recommended);
+    setState(() {
+      _manualPositionPercent = normalizedPercent;
+      _autoRecommendedPercent = normalizedPercent;
+    });
+    await _runCommand(
+      motor,
+      (controller) => controller.setPosition(percent: normalizedPercent),
+      keepAutoMode: true,
+    );
+    setState(() => _latestActivity = '자동 실행: ${normalizedPercent.round()}%');
   }
 
   Future<void> _changePositionManually(
@@ -148,10 +264,18 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
   ) async {
     final percent = await _askPositionPercent(currentPercent);
     if (percent == null) return;
+
+    final normalizedPercent = _normalizedPercent(percent);
+    setState(() {
+      _autoMode = false;
+      _manualPositionPercent = normalizedPercent;
+      _autoRecommendedPercent = null;
+    });
     await _runCommand(
       motor,
-      (controller) => controller.setPosition(percent: percent),
+      (controller) => controller.setPosition(percent: normalizedPercent),
     );
+    setState(() => _latestActivity = '수동 설정: ${normalizedPercent.round()}%');
   }
 
   Future<double?> _askPositionPercent(double? currentPercent) =>
@@ -204,6 +328,7 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
     final weather =
         ref.watch(outdoorWeatherProvider).value ??
         const OutdoorWeatherStatus.loading();
+    final profile = ref.watch(houseProfileProvider).value ?? const HouseProfile();
     final environment = EnvironmentSnapshot.fromSources(
       indoor: !indoorOverride.isLoading && sensorFresh
           ? latestSensorReading
@@ -212,9 +337,12 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
       weather: weather,
     );
     final motorState = motor?.latestState;
-    final openPercent = motorState?.positionValid == true
+    final livePercent = motorState?.positionValid == true
         ? motorState?.currentPositionPercent
         : null;
+    final openPercent = _autoMode && _autoRecommendedPercent != null
+        ? _autoRecommendedPercent
+        : livePercent;
     final safetyStop = motorState?.hasError ?? false;
     final rainLock = environment.isRaining;
     final isLocked = rainLock || safetyStop;
@@ -240,7 +368,13 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
                           isLocked: isLocked,
                           autoMode: _autoMode,
                           updatedAtLabel: environment.updatedAtLabel,
-                          onAutoTap: _toggleAutoMode,
+                          onAutoTap: () => _toggleAutoMode(
+                            motor,
+                            environment,
+                            profile,
+                            weather,
+                            currentPercent: openPercent,
+                          ),
                           onSettingsTap: () =>
                               _openSettings(environment, rainLock, safetyStop),
                         ),
@@ -282,6 +416,14 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
                                 ref.invalidate(rawOutdoorWeatherProvider),
                           ),
                         ),
+                        if (_autoMode && _autoRecommendedPercent != null) ...[
+                          const SizedBox(height: 8),
+                          _AutoRecommendAction(
+                            recommendedPercent: _autoRecommendedPercent!,
+                            enabled: controlsEnabled,
+                            onExecute: () => _executeAutoRecommendation(motor),
+                          ),
+                        ],
                         const SizedBox(height: 12),
                         _LatestActivity(
                           text: _latestActivity ?? _motorActivity(motor),
@@ -806,6 +948,64 @@ class _SlidingGlassPanel extends StatelessWidget {
             color: const Color(0xFF3182F6),
             borderRadius: BorderRadius.circular(999),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AutoRecommendAction extends StatelessWidget {
+  const _AutoRecommendAction({
+    required this.recommendedPercent,
+    required this.enabled,
+    required this.onExecute,
+  });
+
+  final double recommendedPercent;
+  final bool enabled;
+  final VoidCallback onExecute;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '추천',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: const Color(0xFF6B7684),
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    '${recommendedPercent.round()}%',
+                    key: const ValueKey('auto_recommended_percent'),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: const Color(0xFF3182F6),
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            FilledButton.icon(
+              key: const ValueKey('execute_auto_recommendation'),
+              onPressed: enabled ? onExecute : null,
+              icon: const Icon(Icons.play_arrow_rounded, size: 18),
+              label: const Text('실행'),
+            ),
+          ],
         ),
       ),
     );
