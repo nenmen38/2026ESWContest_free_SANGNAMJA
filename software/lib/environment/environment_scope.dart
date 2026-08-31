@@ -27,7 +27,101 @@ final selectedDeviceIdsProvider = FutureProvider<SelectedDeviceIds>(
   (ref) => ref.watch(appStorageProvider).readSelectedDeviceIds(),
 );
 
-final outdoorWeatherProvider = StreamProvider<OutdoorWeatherStatus>((ref) {
+final indoorEnvironmentOverrideProvider =
+    AsyncNotifierProvider<
+      IndoorEnvironmentOverrideController,
+      IndoorEnvironmentOverride?
+    >(IndoorEnvironmentOverrideController.new);
+
+final class IndoorEnvironmentOverrideController
+    extends AsyncNotifier<IndoorEnvironmentOverride?> {
+  Future<IndoorEnvironmentOverride?>? _restore;
+
+  @override
+  Future<IndoorEnvironmentOverride?> build() =>
+      _restore = ref.watch(appStorageProvider).readIndoorEnvironmentOverride();
+
+  Future<void> setField(IndoorEnvironmentField field, double? value) async {
+    final current =
+        state.value ??
+        await (_restore ??= ref
+            .read(appStorageProvider)
+            .readIndoorEnvironmentOverride());
+    final next = IndoorEnvironmentOverride(
+      temperatureC: field == IndoorEnvironmentField.temperatureC
+          ? value
+          : current?.temperatureC,
+      humidityPercent: field == IndoorEnvironmentField.humidityPercent
+          ? value
+          : current?.humidityPercent,
+      pm2_5: field == IndoorEnvironmentField.pm2_5 ? value : current?.pm2_5,
+      updatedAt: DateTime.now(),
+    );
+    next.validate();
+    if (!next.isActive) {
+      await clearAll();
+      return;
+    }
+    await ref.read(appStorageProvider).writeIndoorEnvironmentOverride(next);
+    state = AsyncData(next);
+  }
+
+  Future<void> clearAll() async {
+    await ref.read(appStorageProvider).clearIndoorEnvironmentOverride();
+    state = const AsyncData(null);
+  }
+}
+
+final outdoorEnvironmentOverrideProvider =
+    AsyncNotifierProvider<
+      OutdoorEnvironmentOverrideController,
+      OutdoorEnvironmentOverride?
+    >(OutdoorEnvironmentOverrideController.new);
+
+final class OutdoorEnvironmentOverrideController
+    extends AsyncNotifier<OutdoorEnvironmentOverride?> {
+  Future<OutdoorEnvironmentOverride?>? _restore;
+
+  @override
+  Future<OutdoorEnvironmentOverride?> build() =>
+      _restore = ref.watch(appStorageProvider).readOutdoorEnvironmentOverride();
+
+  Future<void> setField(OutdoorEnvironmentField field, double? value) async {
+    final current =
+        state.value ??
+        await (_restore ??= ref
+            .read(appStorageProvider)
+            .readOutdoorEnvironmentOverride());
+    final now = DateTime.now();
+    final next = OutdoorEnvironmentOverride(
+      temperatureC: field == OutdoorEnvironmentField.temperatureC
+          ? value
+          : current?.temperatureC,
+      humidityPercent: field == OutdoorEnvironmentField.humidityPercent
+          ? value
+          : current?.humidityPercent,
+      pm2_5: field == OutdoorEnvironmentField.pm2_5 ? value : current?.pm2_5,
+      precipitationMm: field == OutdoorEnvironmentField.precipitationMm
+          ? value
+          : current?.precipitationMm,
+      updatedAt: now,
+    );
+    next.validate();
+    if (!next.isActive) {
+      await clearAll();
+      return;
+    }
+    await ref.read(appStorageProvider).writeOutdoorEnvironmentOverride(next);
+    state = AsyncData(next);
+  }
+
+  Future<void> clearAll() async {
+    await ref.read(appStorageProvider).clearOutdoorEnvironmentOverride();
+    state = const AsyncData(null);
+  }
+}
+
+final rawOutdoorWeatherProvider = StreamProvider<OutdoorWeatherStatus>((ref) {
   final controller = StreamController<OutdoorWeatherStatus>();
   var disposed = false;
   Timer? timer;
@@ -70,6 +164,17 @@ final outdoorWeatherProvider = StreamProvider<OutdoorWeatherStatus>((ref) {
     unawaited(controller.close());
   });
   return controller.stream;
+});
+
+final outdoorWeatherProvider = Provider<AsyncValue<OutdoorWeatherStatus>>((
+  ref,
+) {
+  final source = ref.watch(rawOutdoorWeatherProvider);
+  final override = ref.watch(outdoorEnvironmentOverrideProvider);
+  if (override.isLoading) return const AsyncValue.loading();
+  return source.whenData(
+    (status) => applyOutdoorEnvironmentOverride(status, override.value),
+  );
 });
 
 MotorDeviceSnapshot? resolveMotor(

@@ -117,7 +117,7 @@ class SettingsPage extends ConsumerWidget {
                           ),
                         );
                         ref.invalidate(installationLocationProvider);
-                        ref.invalidate(outdoorWeatherProvider);
+                        ref.invalidate(rawOutdoorWeatherProvider);
                       },
                     ),
                   ],

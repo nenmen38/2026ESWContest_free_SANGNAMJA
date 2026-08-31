@@ -86,7 +86,7 @@ class _InstallationLocationPageState
     location.validate();
     await ref.read(appStorageProvider).writeInstallationLocation(location);
     ref.invalidate(installationLocationProvider);
-    ref.invalidate(outdoorWeatherProvider);
+    ref.invalidate(rawOutdoorWeatherProvider);
     if (mounted) Navigator.of(context).pop(true);
   }
 
