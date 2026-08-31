@@ -78,7 +78,7 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      ref.invalidate(outdoorWeatherProvider);
+      ref.invalidate(rawOutdoorWeatherProvider);
     }
   }
 
@@ -200,11 +200,15 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
         !latestSensorReading.hasSensorError &&
         DateTime.now().difference(latestSensorReading.receivedAt) <=
             const Duration(seconds: 15);
+    final indoorOverride = ref.watch(indoorEnvironmentOverrideProvider);
     final weather =
         ref.watch(outdoorWeatherProvider).value ??
         const OutdoorWeatherStatus.loading();
     final environment = EnvironmentSnapshot.fromSources(
-      indoor: sensorFresh ? latestSensorReading : null,
+      indoor: !indoorOverride.isLoading && sensorFresh
+          ? latestSensorReading
+          : null,
+      indoorOverride: indoorOverride.value,
       weather: weather,
     );
     final motorState = motor?.latestState;
@@ -275,7 +279,7 @@ class _SmartWindowHomeState extends ConsumerState<SmartWindowHome>
                             rainLock: rainLock,
                             weatherError: weather.error != null,
                             onWeatherRefresh: () =>
-                                ref.invalidate(outdoorWeatherProvider),
+                                ref.invalidate(rawOutdoorWeatherProvider),
                           ),
                         ),
                         const SizedBox(height: 12),

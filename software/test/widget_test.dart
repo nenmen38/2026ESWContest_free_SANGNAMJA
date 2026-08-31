@@ -21,7 +21,7 @@ void main() {
         storage ?? MemoryAppStorage(onboardingSeen: true),
       ),
       sdkProvider.overrideWithValue(sdk ?? FakeEswDeviceSdk()),
-      outdoorWeatherProvider.overrideWith((_) => Stream.value(weather)),
+      outdoorWeatherProvider.overrideWithValue(AsyncData(weather)),
     ],
     child: const SmartWindowApp(),
   );
@@ -108,6 +108,36 @@ void main() {
     expect(sdk.commands, isEmpty);
   });
 
+  testWidgets('저장된 강수량 override가 최종 provider를 거쳐 비 보호에 반영된다', (tester) async {
+    final sdk = readySdk();
+    final storage = MemoryAppStorage(
+      onboardingSeen: true,
+      outdoorEnvironmentOverride: OutdoorEnvironmentOverride(
+        precipitationMm: 1.2,
+        updatedAt: DateTime.now(),
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appStorageProvider.overrideWithValue(storage),
+          sdkProvider.overrideWithValue(sdk),
+          rawOutdoorWeatherProvider.overrideWith(
+            (_) =>
+                Stream.value(OutdoorWeatherStatus(reading: outdoorReading())),
+          ),
+        ],
+        child: const SmartWindowApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('습도 69% · 비'), findsOneWidget);
+    await tester.tap(find.text('열기'));
+    await tester.pumpAndSettle();
+    expect(sdk.commands, isEmpty);
+  });
+
   testWidgets('오래된 센서값은 실내 실데이터로 표시하지 않는다', (tester) async {
     final sdk = FakeEswDeviceSdk();
     sdk.emitDevices([
@@ -129,6 +159,92 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('— / 18'), findsOneWidget);
   });
+
+  testWidgets('저장된 실내 override를 표시하고 해제하면 최신 센서값으로 복귀한다', (tester) async {
+    final storage = MemoryAppStorage(
+      onboardingSeen: true,
+      indoorEnvironmentOverride: IndoorEnvironmentOverride(
+        temperatureC: 33.3,
+        humidityPercent: 77,
+        pm2_5: 88,
+        updatedAt: DateTime.now(),
+      ),
+    );
+    await tester.pumpWidget(
+      testApp(
+        storage: storage,
+        sdk: readySdk(),
+        weather: OutdoorWeatherStatus(reading: outdoorReading()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('33.3°C'), findsOneWidget);
+    expect(find.text('습도 77%'), findsOneWidget);
+    expect(find.text('88 / 18'), findsOneWidget);
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(SmartWindowHome)),
+    );
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('33.3°C · 습도 77%'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('33.3°C · 습도 77%'), findsOneWidget);
+    expect(find.text('매우 나쁨 · PM2.5 88㎍/㎥'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await container.read(indoorEnvironmentOverrideProvider.notifier).clearAll();
+    await tester.pumpAndSettle();
+    expect(find.text('25.8°C'), findsOneWidget);
+    expect(find.text('습도 54%'), findsOneWidget);
+    expect(find.text('13 / 18'), findsOneWidget);
+  });
+
+  for (final scenario in ['센서 없음', '센서 오프라인', '센서 오류', '센서 지연']) {
+    testWidgets('완전한 실내 override는 $scenario 상태에서도 표시된다', (tester) async {
+      final sdk = FakeEswDeviceSdk();
+      final now = DateTime.now();
+      if (scenario != '센서 없음') {
+        sdk.emitDevices([
+          AirQualityDeviceSnapshot(
+            id: 'sensor-test',
+            isOnline: scenario != '센서 오프라인',
+            lastSeen: now,
+            latestReading: sensorReading(
+              receivedAt: scenario == '센서 지연'
+                  ? now.subtract(const Duration(minutes: 1))
+                  : now,
+              errorFlags: scenario == '센서 오류' ? 1 : 0,
+            ),
+          ),
+        ]);
+      }
+      await tester.pumpWidget(
+        testApp(
+          storage: MemoryAppStorage(
+            onboardingSeen: true,
+            indoorEnvironmentOverride: IndoorEnvironmentOverride(
+              temperatureC: 33.3,
+              humidityPercent: 77,
+              pm2_5: 88,
+              updatedAt: now,
+            ),
+          ),
+          sdk: sdk,
+          weather: OutdoorWeatherStatus(reading: outdoorReading()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('33.3°C'), findsOneWidget);
+      expect(find.text('습도 77%'), findsOneWidget);
+      expect(find.text('88 / 18'), findsOneWidget);
+    });
+  }
 
   testWidgets('설정에서 장치와 설치 위치 관리 경로를 표시한다', (tester) async {
     final storage = MemoryAppStorage(
@@ -157,6 +273,17 @@ void main() {
       scrollable: find.byType(Scrollable).last,
     );
     expect(find.text('Open-Meteo · CAMS'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('개발자 도구'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('개발자 도구'));
+    await tester.pumpAndSettle();
+    expect(find.text('테스트용 환경 데이터입니다.'), findsNothing);
+    expect(find.textContaining('테스트용 환경 데이터입니다.'), findsOneWidget);
+    expect(find.text('실내 환경'), findsOneWidget);
+    expect(find.text('실외 환경'), findsOneWidget);
   });
 
   testWidgets('최초 실행 랜딩을 건너뛰면 이후 홈으로 진입한다', (tester) async {
@@ -211,38 +338,6 @@ FakeEswDeviceSdk readySdk() {
   ]);
   return sdk;
 }
-
-AirQualityReading sensorReading({DateTime? receivedAt}) => AirQualityReading(
-  temperatureC: 25.8,
-  humidityPercent: 54,
-  pressureHpa: 1013,
-  pm1_0: 8,
-  pm2_5: 13,
-  pm10: 21,
-  level: AirQualityLevel.good,
-  receivedAt: receivedAt ?? DateTime.now(),
-  deviceTimestamp: const Duration(seconds: 1),
-  revision: 1,
-  errorFlags: 0,
-  raw: const AirQualityRaw(
-    pmStatus: 0,
-    pmMeasurementMode: 1,
-    pmCalibration: 0,
-    grimmPm1_0: 8,
-    grimmPm2_5: 13,
-    grimmPm10: 21,
-    tsiPm1_0: 7,
-    tsiPm2_5: 12,
-    tsiPm10: 20,
-    particles0_3: 100,
-    particles0_5: 80,
-    particles1_0: 40,
-    particles2_5: 15,
-    particles5_0: 4,
-    particles10_0: 1,
-    bmeStatus: 0,
-  ),
-);
 
 OutdoorReading outdoorReading({double precipitationMm = 0}) => OutdoorReading(
   temperatureC: 28.2,

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app/sdk_scope.dart';
 import '../environment/environment_models.dart';
 import '../environment/environment_scope.dart';
+import 'developer_tools_page.dart';
 import 'device_management_page.dart';
 import 'installation_location_page.dart';
 
@@ -35,6 +36,11 @@ class SettingsPage extends ConsumerWidget {
     final sdkState = ref.watch(sdkStateProvider).value ?? sdk.currentState;
     final selected =
         ref.watch(selectedDeviceIdsProvider).value ?? const SelectedDeviceIds();
+    final hasEnvironmentOverride =
+        (ref.watch(indoorEnvironmentOverrideProvider).value?.isActive ??
+            false) ||
+        (ref.watch(outdoorEnvironmentOverrideProvider).value?.isActive ??
+            false);
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F8),
       appBar: AppBar(
@@ -117,7 +123,7 @@ class SettingsPage extends ConsumerWidget {
                           ),
                         );
                         ref.invalidate(installationLocationProvider);
-                        ref.invalidate(outdoorWeatherProvider);
+                        ref.invalidate(rawOutdoorWeatherProvider);
                       },
                     ),
                   ],
@@ -184,6 +190,24 @@ class SettingsPage extends ConsumerWidget {
                       icon: Icons.info_outline,
                       title: '날씨·공기질 출처',
                       value: 'Open-Meteo · CAMS',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _SettingsSection(
+                  title: '개발자',
+                  children: [
+                    _SettingsTile(
+                      icon: Icons.developer_mode_outlined,
+                      title: '개발자 도구',
+                      value: hasEnvironmentOverride
+                          ? '테스트값 사용 중'
+                          : '환경 데이터 테스트',
+                      onTap: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) => const DeveloperToolsPage(),
+                        ),
+                      ),
                     ),
                   ],
                 ),

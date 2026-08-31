@@ -10,12 +10,16 @@ final class MemoryAppStorage implements AppStorage {
     this.credentials,
     this.location,
     this.selectedDevices = const SelectedDeviceIds(),
+    this.indoorEnvironmentOverride,
+    this.outdoorEnvironmentOverride,
   });
 
   bool onboardingSeen;
   EswConnectionConfig? credentials;
   InstallationLocation? location;
   SelectedDeviceIds selectedDevices;
+  IndoorEnvironmentOverride? indoorEnvironmentOverride;
+  OutdoorEnvironmentOverride? outdoorEnvironmentOverride;
 
   @override
   Future<void> clearCredentials() async => credentials = null;
@@ -46,6 +50,32 @@ final class MemoryAppStorage implements AppStorage {
   @override
   Future<void> writeSelectedDeviceIds(SelectedDeviceIds value) async =>
       selectedDevices = value;
+
+  @override
+  Future<IndoorEnvironmentOverride?> readIndoorEnvironmentOverride() async =>
+      indoorEnvironmentOverride;
+
+  @override
+  Future<void> writeIndoorEnvironmentOverride(
+    IndoorEnvironmentOverride value,
+  ) async => indoorEnvironmentOverride = value;
+
+  @override
+  Future<void> clearIndoorEnvironmentOverride() async =>
+      indoorEnvironmentOverride = null;
+
+  @override
+  Future<OutdoorEnvironmentOverride?> readOutdoorEnvironmentOverride() async =>
+      outdoorEnvironmentOverride;
+
+  @override
+  Future<void> writeOutdoorEnvironmentOverride(
+    OutdoorEnvironmentOverride value,
+  ) async => outdoorEnvironmentOverride = value;
+
+  @override
+  Future<void> clearOutdoorEnvironmentOverride() async =>
+      outdoorEnvironmentOverride = null;
 }
 
 final class FakeEswDeviceSdk implements EswDeviceSdk {
@@ -209,3 +239,36 @@ final class _FakeMotor implements MotorController {
   @override
   Future<CommandResult> stop() => _accepted('stop');
 }
+
+AirQualityReading sensorReading({DateTime? receivedAt, int errorFlags = 0}) =>
+    AirQualityReading(
+      temperatureC: 25.8,
+      humidityPercent: 54,
+      pressureHpa: 1013,
+      pm1_0: 8,
+      pm2_5: 13,
+      pm10: 21,
+      level: AirQualityLevel.good,
+      receivedAt: receivedAt ?? DateTime.now(),
+      deviceTimestamp: const Duration(seconds: 1),
+      revision: 1,
+      errorFlags: errorFlags,
+      raw: const AirQualityRaw(
+        pmStatus: 0,
+        pmMeasurementMode: 1,
+        pmCalibration: 0,
+        grimmPm1_0: 8,
+        grimmPm2_5: 13,
+        grimmPm10: 21,
+        tsiPm1_0: 7,
+        tsiPm2_5: 12,
+        tsiPm10: 20,
+        particles0_3: 100,
+        particles0_5: 80,
+        particles1_0: 40,
+        particles2_5: 15,
+        particles5_0: 4,
+        particles10_0: 1,
+        bmeStatus: 0,
+      ),
+    );

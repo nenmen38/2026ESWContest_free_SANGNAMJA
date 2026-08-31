@@ -74,6 +74,172 @@ final class OutdoorReading {
   bool get isRaining => precipitationMm > 0;
 }
 
+enum IndoorEnvironmentField { temperatureC, humidityPercent, pm2_5 }
+
+final class IndoorEnvironmentOverride {
+  const IndoorEnvironmentOverride({
+    required this.updatedAt,
+    this.temperatureC,
+    this.humidityPercent,
+    this.pm2_5,
+  });
+
+  final double? temperatureC;
+  final double? humidityPercent;
+  final double? pm2_5;
+  final DateTime updatedAt;
+
+  bool get isActive =>
+      temperatureC != null || humidityPercent != null || pm2_5 != null;
+
+  bool get isComplete =>
+      temperatureC != null && humidityPercent != null && pm2_5 != null;
+
+  void validate() {
+    _validateRange(temperatureC, 'temperatureC', -100, 100);
+    _validateRange(humidityPercent, 'humidityPercent', 0, 100);
+    _validateRange(pm2_5, 'pm2_5', 0, 10000);
+  }
+
+  Map<String, dynamic> toJson() => {
+    'temperatureC': temperatureC,
+    'humidityPercent': humidityPercent,
+    'pm2_5': pm2_5,
+    'updatedAt': updatedAt.toIso8601String(),
+  };
+
+  factory IndoorEnvironmentOverride.fromJson(Map<String, dynamic> json) {
+    double? optionalNumber(String key) {
+      final value = json[key];
+      if (value == null) return null;
+      if (value is! num) {
+        throw FormatException('$key must be a number.');
+      }
+      return value.toDouble();
+    }
+
+    final updatedAt = DateTime.tryParse(json['updatedAt'] as String? ?? '');
+    if (updatedAt == null) {
+      throw const FormatException('updatedAt must be an ISO-8601 timestamp.');
+    }
+    final value = IndoorEnvironmentOverride(
+      temperatureC: optionalNumber('temperatureC'),
+      humidityPercent: optionalNumber('humidityPercent'),
+      pm2_5: optionalNumber('pm2_5'),
+      updatedAt: updatedAt,
+    );
+    value.validate();
+    return value;
+  }
+
+  static void _validateRange(
+    double? value,
+    String name,
+    double minimum,
+    double maximum,
+  ) {
+    if (value == null) return;
+    if (!value.isFinite || value < minimum || value > maximum) {
+      throw ArgumentError.value(
+        value,
+        name,
+        'Must be a finite number from $minimum to $maximum.',
+      );
+    }
+  }
+}
+
+enum OutdoorEnvironmentField {
+  temperatureC,
+  humidityPercent,
+  pm2_5,
+  precipitationMm,
+}
+
+final class OutdoorEnvironmentOverride {
+  const OutdoorEnvironmentOverride({
+    required this.updatedAt,
+    this.temperatureC,
+    this.humidityPercent,
+    this.pm2_5,
+    this.precipitationMm,
+  });
+
+  final double? temperatureC;
+  final double? humidityPercent;
+  final double? pm2_5;
+  final double? precipitationMm;
+  final DateTime updatedAt;
+
+  bool get isActive =>
+      temperatureC != null ||
+      humidityPercent != null ||
+      pm2_5 != null ||
+      precipitationMm != null;
+
+  bool get isComplete =>
+      temperatureC != null &&
+      humidityPercent != null &&
+      pm2_5 != null &&
+      precipitationMm != null;
+
+  void validate() {
+    _validateRange(temperatureC, 'temperatureC', -100, 100);
+    _validateRange(humidityPercent, 'humidityPercent', 0, 100);
+    _validateRange(pm2_5, 'pm2_5', 0, 10000);
+    _validateRange(precipitationMm, 'precipitationMm', 0, 1000);
+  }
+
+  Map<String, dynamic> toJson() => {
+    'temperatureC': temperatureC,
+    'humidityPercent': humidityPercent,
+    'pm2_5': pm2_5,
+    'precipitationMm': precipitationMm,
+    'updatedAt': updatedAt.toIso8601String(),
+  };
+
+  factory OutdoorEnvironmentOverride.fromJson(Map<String, dynamic> json) {
+    double? optionalNumber(String key) {
+      final value = json[key];
+      if (value == null) return null;
+      if (value is! num) {
+        throw FormatException('$key must be a number.');
+      }
+      return value.toDouble();
+    }
+
+    final updatedAt = DateTime.tryParse(json['updatedAt'] as String? ?? '');
+    if (updatedAt == null) {
+      throw const FormatException('updatedAt must be an ISO-8601 timestamp.');
+    }
+    final value = OutdoorEnvironmentOverride(
+      temperatureC: optionalNumber('temperatureC'),
+      humidityPercent: optionalNumber('humidityPercent'),
+      pm2_5: optionalNumber('pm2_5'),
+      precipitationMm: optionalNumber('precipitationMm'),
+      updatedAt: updatedAt,
+    );
+    value.validate();
+    return value;
+  }
+
+  static void _validateRange(
+    double? value,
+    String name,
+    double minimum,
+    double maximum,
+  ) {
+    if (value == null) return;
+    if (!value.isFinite || value < minimum || value > maximum) {
+      throw ArgumentError.value(
+        value,
+        name,
+        'Must be a finite number from $minimum to $maximum.',
+      );
+    }
+  }
+}
+
 final class OutdoorWeatherStatus {
   const OutdoorWeatherStatus({
     this.reading,
@@ -92,6 +258,45 @@ final class OutdoorWeatherStatus {
   final bool isLoading;
   final bool isDelayed;
   final Object? error;
+}
+
+OutdoorWeatherStatus applyOutdoorEnvironmentOverride(
+  OutdoorWeatherStatus source,
+  OutdoorEnvironmentOverride? override,
+) {
+  if (override == null || !override.isActive) return source;
+  override.validate();
+
+  final sourceReading = source.reading;
+  if (sourceReading == null && !override.isComplete) return source;
+
+  final reading = sourceReading == null
+      ? OutdoorReading(
+          temperatureC: override.temperatureC!,
+          humidityPercent: override.humidityPercent!,
+          pm2_5: override.pm2_5!,
+          precipitationMm: override.precipitationMm!,
+          observedAt: override.updatedAt,
+          fetchedAt: override.updatedAt,
+        )
+      : OutdoorReading(
+          temperatureC: override.temperatureC ?? sourceReading.temperatureC,
+          humidityPercent:
+              override.humidityPercent ?? sourceReading.humidityPercent,
+          pm2_5: override.pm2_5 ?? sourceReading.pm2_5,
+          precipitationMm:
+              override.precipitationMm ?? sourceReading.precipitationMm,
+          observedAt: sourceReading.observedAt,
+          fetchedAt: override.updatedAt.isAfter(sourceReading.fetchedAt)
+              ? override.updatedAt
+              : sourceReading.fetchedAt,
+        );
+  return OutdoorWeatherStatus(
+    reading: reading,
+    isLoading: false,
+    isDelayed: source.isDelayed,
+    error: source.error,
+  );
 }
 
 final class TemperatureHumidity {
@@ -137,25 +342,40 @@ final class EnvironmentSnapshot {
 
   factory EnvironmentSnapshot.fromSources({
     AirQualityReading? indoor,
+    IndoorEnvironmentOverride? indoorOverride,
     OutdoorWeatherStatus weather = const OutdoorWeatherStatus.loading(),
   }) {
+    final appliesIndoorOverride =
+        indoorOverride != null &&
+        indoorOverride.isActive &&
+        (indoor != null || indoorOverride.isComplete);
+    if (appliesIndoorOverride) indoorOverride.validate();
     final outdoor = weather.reading;
     final timestamps = <DateTime>[
       if (indoor != null) indoor.receivedAt,
+      if (appliesIndoorOverride) indoorOverride.updatedAt,
       if (outdoor != null) outdoor.fetchedAt,
     ];
     timestamps.sort();
     final latest = timestamps.lastOrNull;
     return EnvironmentSnapshot(
       indoor: TemperatureHumidity(
-        temperatureC: indoor?.temperatureC,
-        humidityPercent: indoor?.humidityPercent,
+        temperatureC: appliesIndoorOverride
+            ? indoorOverride.temperatureC ?? indoor?.temperatureC
+            : indoor?.temperatureC,
+        humidityPercent: appliesIndoorOverride
+            ? indoorOverride.humidityPercent ?? indoor?.humidityPercent
+            : indoor?.humidityPercent,
       ),
       outdoor: TemperatureHumidity(
         temperatureC: outdoor?.temperatureC,
         humidityPercent: outdoor?.humidityPercent,
       ),
-      indoorFineDust: FineDust(pm25: indoor?.pm2_5?.toDouble()),
+      indoorFineDust: FineDust(
+        pm25: appliesIndoorOverride
+            ? indoorOverride.pm2_5 ?? indoor?.pm2_5?.toDouble()
+            : indoor?.pm2_5?.toDouble(),
+      ),
       outdoorFineDust: FineDust(pm25: outdoor?.pm2_5),
       isRaining: outdoor?.isRaining ?? false,
       updatedAtLabel: latest == null
