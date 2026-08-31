@@ -118,6 +118,46 @@ void main() {
     expect(find.text('수동'), findsOneWidget);
   });
 
+  testWidgets('저장된 강풍 override는 자동 추천을 0%로 만들고 자동 실행하지 않는다', (tester) async {
+    final sdk = readySdk();
+    final storage = MemoryAppStorage(
+      onboardingSeen: true,
+      outdoorEnvironmentOverride: OutdoorEnvironmentOverride(
+        windSpeed10m: 10,
+        windDirection10m: 180,
+        updatedAt: DateTime.now(),
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appStorageProvider.overrideWithValue(storage),
+          sdkProvider.overrideWithValue(sdk),
+          rawOutdoorWeatherProvider.overrideWith(
+            (_) =>
+                Stream.value(OutdoorWeatherStatus(reading: outdoorReading())),
+          ),
+        ],
+        child: const SmartWindowApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('수동'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('auto_recommended_percent')))
+          .data,
+      '0%',
+    );
+    expect(
+      sdk.commands.where((command) => command.startsWith('set:')),
+      isEmpty,
+    );
+  });
+
   testWidgets('개도율 숫자를 직접 입력하면 위치 명령을 보내고 수동으로 전환한다', (tester) async {
     final sdk = readySdk();
     await tester.pumpWidget(

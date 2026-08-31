@@ -119,6 +119,12 @@ final class OutdoorEnvironmentOverrideController
       precipitationMm: field == OutdoorEnvironmentField.precipitationMm
           ? value
           : current?.precipitationMm,
+      windSpeed10m: field == OutdoorEnvironmentField.windSpeed10m
+          ? value
+          : current?.windSpeed10m,
+      windDirection10m: field == OutdoorEnvironmentField.windDirection10m
+          ? value
+          : current?.windDirection10m,
     );
   }
 
@@ -127,12 +133,16 @@ final class OutdoorEnvironmentOverrideController
     double? humidityPercent,
     double? pm2_5,
     double? precipitationMm,
+    double? windSpeed10m,
+    double? windDirection10m,
   }) async {
     final next = OutdoorEnvironmentOverride(
       temperatureC: temperatureC,
       humidityPercent: humidityPercent,
       pm2_5: pm2_5,
       precipitationMm: precipitationMm,
+      windSpeed10m: windSpeed10m,
+      windDirection10m: windDirection10m,
       updatedAt: DateTime.now(),
     );
     next.validate();

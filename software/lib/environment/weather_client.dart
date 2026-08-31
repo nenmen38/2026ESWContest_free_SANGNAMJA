@@ -24,8 +24,8 @@ final class OpenMeteoWeatherClient implements WeatherClient {
     final forecastUri = Uri.https('api.open-meteo.com', '/v1/forecast', {
       'latitude': '${location.latitude}',
       'longitude': '${location.longitude}',
-      'current':
-          'temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m',
+      'current': 'temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m',
+      'wind_speed_unit': 'kmh',
       'timezone': 'auto',
     });
     final airUri = Uri.https(
@@ -83,8 +83,7 @@ final class OpenMeteoWeatherClient implements WeatherClient {
       humidityPercent: number(weather, 'relative_humidity_2m'),
       precipitationMm: number(weather, 'precipitation'),
       windSpeed10m: windSpeed is num ? windSpeed.toDouble() : null,
-      windDirection10m:
-          windDirection is num ? windDirection.toDouble() : null,
+      windDirection10m: windDirection is num ? windDirection.toDouble() : null,
       pm2_5: number(air, 'pm2_5'),
       observedAt: observedAt,
       fetchedAt: fetchedAt,

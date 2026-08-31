@@ -15,6 +15,8 @@ void main() {
           'temperature_2m': 27.4,
           'relative_humidity_2m': 63,
           'precipitation': 0.5,
+          'wind_speed_10m': 12.5,
+          'wind_direction_10m': 275,
         },
       },
       {
@@ -25,6 +27,8 @@ void main() {
     expect(reading.temperatureC, 27.4);
     expect(reading.humidityPercent, 63);
     expect(reading.pm2_5, 12.6);
+    expect(reading.windSpeed10m, 12.5);
+    expect(reading.windDirection10m, 275);
     expect(reading.isRaining, isTrue);
   });
 
@@ -71,5 +75,12 @@ void main() {
     );
     expect(requests.any((uri) => uri.path == '/v1/forecast'), isTrue);
     expect(requests.any((uri) => uri.path == '/v1/air-quality'), isTrue);
+    expect(
+      requests
+          .where((uri) => uri.path == '/v1/forecast')
+          .single
+          .queryParameters['wind_speed_unit'],
+      'kmh',
+    );
   });
 }

@@ -245,6 +245,8 @@ enum OutdoorEnvironmentField {
   humidityPercent,
   pm2_5,
   precipitationMm,
+  windSpeed10m,
+  windDirection10m,
 }
 
 final class OutdoorEnvironmentOverride {
@@ -254,19 +256,25 @@ final class OutdoorEnvironmentOverride {
     this.humidityPercent,
     this.pm2_5,
     this.precipitationMm,
+    this.windSpeed10m,
+    this.windDirection10m,
   });
 
   final double? temperatureC;
   final double? humidityPercent;
   final double? pm2_5;
   final double? precipitationMm;
+  final double? windSpeed10m;
+  final double? windDirection10m;
   final DateTime updatedAt;
 
   bool get isActive =>
       temperatureC != null ||
       humidityPercent != null ||
       pm2_5 != null ||
-      precipitationMm != null;
+      precipitationMm != null ||
+      windSpeed10m != null ||
+      windDirection10m != null;
 
   bool get isComplete =>
       temperatureC != null &&
@@ -279,6 +287,8 @@ final class OutdoorEnvironmentOverride {
     _validateRange(humidityPercent, 'humidityPercent', 0, 100);
     _validateRange(pm2_5, 'pm2_5', 0, 10000);
     _validateRange(precipitationMm, 'precipitationMm', 0, 1000);
+    _validateRange(windSpeed10m, 'windSpeed10m', 0, 500);
+    _validateRange(windDirection10m, 'windDirection10m', 0, 360);
   }
 
   Map<String, dynamic> toJson() => {
@@ -286,6 +296,8 @@ final class OutdoorEnvironmentOverride {
     'humidityPercent': humidityPercent,
     'pm2_5': pm2_5,
     'precipitationMm': precipitationMm,
+    'windSpeed10m': windSpeed10m,
+    'windDirection10m': windDirection10m,
     'updatedAt': updatedAt.toIso8601String(),
   };
 
@@ -308,6 +320,8 @@ final class OutdoorEnvironmentOverride {
       humidityPercent: optionalNumber('humidityPercent'),
       pm2_5: optionalNumber('pm2_5'),
       precipitationMm: optionalNumber('precipitationMm'),
+      windSpeed10m: optionalNumber('windSpeed10m'),
+      windDirection10m: optionalNumber('windDirection10m'),
       updatedAt: updatedAt,
     );
     value.validate();
@@ -367,6 +381,8 @@ OutdoorWeatherStatus applyOutdoorEnvironmentOverride(
           humidityPercent: override.humidityPercent!,
           pm2_5: override.pm2_5!,
           precipitationMm: override.precipitationMm!,
+          windSpeed10m: override.windSpeed10m,
+          windDirection10m: override.windDirection10m,
           observedAt: override.updatedAt,
           fetchedAt: override.updatedAt,
         )
@@ -377,6 +393,9 @@ OutdoorWeatherStatus applyOutdoorEnvironmentOverride(
           pm2_5: override.pm2_5 ?? sourceReading.pm2_5,
           precipitationMm:
               override.precipitationMm ?? sourceReading.precipitationMm,
+          windSpeed10m: override.windSpeed10m ?? sourceReading.windSpeed10m,
+          windDirection10m:
+              override.windDirection10m ?? sourceReading.windDirection10m,
           observedAt: sourceReading.observedAt,
           fetchedAt: override.updatedAt.isAfter(sourceReading.fetchedAt)
               ? override.updatedAt
