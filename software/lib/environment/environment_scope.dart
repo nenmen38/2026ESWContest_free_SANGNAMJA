@@ -47,7 +47,7 @@ final class IndoorEnvironmentOverrideController
         await (_restore ??= ref
             .read(appStorageProvider)
             .readIndoorEnvironmentOverride());
-    final next = IndoorEnvironmentOverride(
+    await replace(
       temperatureC: field == IndoorEnvironmentField.temperatureC
           ? value
           : current?.temperatureC,
@@ -55,6 +55,18 @@ final class IndoorEnvironmentOverrideController
           ? value
           : current?.humidityPercent,
       pm2_5: field == IndoorEnvironmentField.pm2_5 ? value : current?.pm2_5,
+    );
+  }
+
+  Future<void> replace({
+    double? temperatureC,
+    double? humidityPercent,
+    double? pm2_5,
+  }) async {
+    final next = IndoorEnvironmentOverride(
+      temperatureC: temperatureC,
+      humidityPercent: humidityPercent,
+      pm2_5: pm2_5,
       updatedAt: DateTime.now(),
     );
     next.validate();
@@ -92,8 +104,7 @@ final class OutdoorEnvironmentOverrideController
         await (_restore ??= ref
             .read(appStorageProvider)
             .readOutdoorEnvironmentOverride());
-    final now = DateTime.now();
-    final next = OutdoorEnvironmentOverride(
+    await replace(
       temperatureC: field == OutdoorEnvironmentField.temperatureC
           ? value
           : current?.temperatureC,
@@ -104,7 +115,21 @@ final class OutdoorEnvironmentOverrideController
       precipitationMm: field == OutdoorEnvironmentField.precipitationMm
           ? value
           : current?.precipitationMm,
-      updatedAt: now,
+    );
+  }
+
+  Future<void> replace({
+    double? temperatureC,
+    double? humidityPercent,
+    double? pm2_5,
+    double? precipitationMm,
+  }) async {
+    final next = OutdoorEnvironmentOverride(
+      temperatureC: temperatureC,
+      humidityPercent: humidityPercent,
+      pm2_5: pm2_5,
+      precipitationMm: precipitationMm,
+      updatedAt: DateTime.now(),
     );
     next.validate();
     if (!next.isActive) {

@@ -273,6 +273,17 @@ void main() {
       scrollable: find.byType(Scrollable).last,
     );
     expect(find.text('Open-Meteo · CAMS'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('개발자 도구'),
+      300,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('개발자 도구'));
+    await tester.pumpAndSettle();
+    expect(find.text('테스트용 환경 데이터입니다.'), findsNothing);
+    expect(find.textContaining('테스트용 환경 데이터입니다.'), findsOneWidget);
+    expect(find.text('실내 환경'), findsOneWidget);
+    expect(find.text('실외 환경'), findsOneWidget);
   });
 
   testWidgets('최초 실행 랜딩을 건너뛰면 이후 홈으로 진입한다', (tester) async {
